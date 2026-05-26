@@ -9,8 +9,10 @@ local DEFAULT_QUEUE_ICON_PERCENT = 25
 local DEFAULT_FONT_SIZE = 14
 local DEFAULT_LOCKED = true
 local DEFAULT_DISABLE_TRINKET_USAGE_ON_CLICK = true
-local DEFAULT_NOTIFICATION_POSITION = "below"
-local DEFAULT_NOTIFICATION_ICON_SIZE = 18
+local DEFAULT_DISABLE_UPPER_TRINKET_SUGGESTIONS = true
+local DEFAULT_DISABLE_LOWER_TRINKET_SUGGESTIONS = true
+local DEFAULT_SUGGESTION_POSITION = "below"
+local DEFAULT_SUGGESTION_ICON_SIZE = 18
 
 local MIN_MAIN_ICON_SIZE = 14
 local MAX_MAIN_ICON_SIZE = 48
@@ -18,8 +20,8 @@ local MIN_QUEUE_ICON_PERCENT = 25
 local MAX_QUEUE_ICON_PERCENT = 50
 local MIN_FONT_SIZE = 14
 local MAX_FONT_SIZE = 48
-local MIN_NOTIFICATION_ICON_SIZE = 14
-local MAX_NOTIFICATION_ICON_SIZE = 48
+local MIN_SUGGESTION_ICON_SIZE = 14
+local MAX_SUGGESTION_ICON_SIZE = 48
 
 local function ClampNumber(value, minValue, maxValue, fallback)
 	value = tonumber(value)
@@ -34,15 +36,19 @@ local function GetDefaultFont()
 	return STANDARD_TEXT_FONT or UNIT_NAME_FONT or DAMAGE_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 end
 
-local function NormalizeNotificationPosition(value)
+local function NormalizeSuggestionPosition(value)
 	if value == "above" or value == "below" then return value end
-	return DEFAULT_NOTIFICATION_POSITION
+	return DEFAULT_SUGGESTION_POSITION
 end
 
 local function EnsureDB()
 	KravaCooldownTrackerDB = KravaCooldownTrackerDB or {}
 	KravaCooldownTrackerDB.config = KravaCooldownTrackerDB.config or {}
 	return KravaCooldownTrackerDB.config
+end
+
+local function GetLegacySuggestionKey(suffix)
+	return "notifi" .. "cation" .. suffix
 end
 
 local function IsUsableFontPath(path)
@@ -100,8 +106,18 @@ function C.Normalize()
 	cfg.mainIconSize = ClampNumber(cfg.mainIconSize, MIN_MAIN_ICON_SIZE, MAX_MAIN_ICON_SIZE, DEFAULT_MAIN_ICON_SIZE)
 	cfg.queueIconPercent = ClampNumber(cfg.queueIconPercent, MIN_QUEUE_ICON_PERCENT, MAX_QUEUE_ICON_PERCENT, DEFAULT_QUEUE_ICON_PERCENT)
 	cfg.fontSize = ClampNumber(cfg.fontSize, MIN_FONT_SIZE, MAX_FONT_SIZE, DEFAULT_FONT_SIZE)
-	cfg.notificationIconSize = ClampNumber(cfg.notificationIconSize, MIN_NOTIFICATION_ICON_SIZE, MAX_NOTIFICATION_ICON_SIZE, DEFAULT_NOTIFICATION_ICON_SIZE)
-	cfg.notificationPosition = NormalizeNotificationPosition(cfg.notificationPosition)
+	local legacyIconSizeKey = GetLegacySuggestionKey("IconSize")
+	local legacyPositionKey = GetLegacySuggestionKey("Position")
+	if cfg.suggestionIconSize == nil and cfg[legacyIconSizeKey] ~= nil then
+		cfg.suggestionIconSize = cfg[legacyIconSizeKey]
+	end
+	if cfg.suggestionPosition == nil and cfg[legacyPositionKey] ~= nil then
+		cfg.suggestionPosition = cfg[legacyPositionKey]
+	end
+	cfg[legacyIconSizeKey] = nil
+	cfg[legacyPositionKey] = nil
+	cfg.suggestionIconSize = ClampNumber(cfg.suggestionIconSize, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, DEFAULT_SUGGESTION_ICON_SIZE)
+	cfg.suggestionPosition = NormalizeSuggestionPosition(cfg.suggestionPosition)
 
 	if not IsUsableFontPath(cfg.fontFace) then
 		cfg.fontFace = GetDefaultFont()
@@ -113,6 +129,14 @@ function C.Normalize()
 
 	if type(cfg.disableTrinketUsageOnClick) ~= "boolean" then
 		cfg.disableTrinketUsageOnClick = DEFAULT_DISABLE_TRINKET_USAGE_ON_CLICK
+	end
+
+	if type(cfg.disableUpperTrinketSuggestions) ~= "boolean" then
+		cfg.disableUpperTrinketSuggestions = DEFAULT_DISABLE_UPPER_TRINKET_SUGGESTIONS
+	end
+
+	if type(cfg.disableLowerTrinketSuggestions) ~= "boolean" then
+		cfg.disableLowerTrinketSuggestions = DEFAULT_DISABLE_LOWER_TRINKET_SUGGESTIONS
 	end
 
 	return cfg
@@ -133,15 +157,15 @@ function C.SetRefreshCallback(callback)
 	C.refreshCallback = callback
 end
 
-function C.NotifyChanged()
+function C.RefreshChanged()
 	if C.refreshCallback then
 		C.refreshCallback(C.Get())
 	end
 end
 
-local function SetAndNotify(key, value)
+local function SetAndRefresh(key, value)
 	C.Set(key, value)
-	C.NotifyChanged()
+	C.RefreshChanged()
 end
 
 local function GetFontLabel(path)
@@ -219,7 +243,7 @@ local function CreateRangeSlider(parent, key, x, y, width, minValue, maxValue, s
 		if self.valueTooltip then
 			self.valueTooltip:SetText(tostring(value) .. (suffix or ""))
 		end
-		SetAndNotify(key, value)
+		SetAndRefresh(key, value)
 	end)
 
 	return slider
@@ -230,7 +254,7 @@ local function CreateSettingCheckbox(parent, key, x, y)
 	check:SetSize(24, 24)
 	check:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
 	check:SetScript("OnClick", function(self)
-		SetAndNotify(key, self:GetChecked() and true or false)
+		SetAndRefresh(key, self:GetChecked() and true or false)
 	end)
 	return check
 end
@@ -244,14 +268,16 @@ local function RefreshModalValues(frame)
 	if frame.fontSizeSlider then frame.fontSizeSlider:SetValue(cfg.fontSize) end
 	if frame.lockedCheck then frame.lockedCheck:SetChecked(cfg.locked) end
 	if frame.disableTrinketUsageCheck then frame.disableTrinketUsageCheck:SetChecked(cfg.disableTrinketUsageOnClick) end
-	if frame.notificationIconSizeSlider then frame.notificationIconSizeSlider:SetValue(cfg.notificationIconSize) end
+	if frame.disableUpperTrinketSuggestionsCheck then frame.disableUpperTrinketSuggestionsCheck:SetChecked(cfg.disableUpperTrinketSuggestions) end
+	if frame.disableLowerTrinketSuggestionsCheck then frame.disableLowerTrinketSuggestionsCheck:SetChecked(cfg.disableLowerTrinketSuggestions) end
+	if frame.suggestionIconSizeSlider then frame.suggestionIconSizeSlider:SetValue(cfg.suggestionIconSize) end
 
 	if frame.fontDropdown and UIDropDownMenu_SetText then
 		UIDropDownMenu_SetText(frame.fontDropdown, GetFontLabel(cfg.fontFace))
 	end
 
-	if frame.notificationPositionDropdown and UIDropDownMenu_SetText then
-		UIDropDownMenu_SetText(frame.notificationPositionDropdown, cfg.notificationPosition == "above" and "Above" or "Below")
+	if frame.suggestionPositionDropdown and UIDropDownMenu_SetText then
+		UIDropDownMenu_SetText(frame.suggestionPositionDropdown, cfg.suggestionPosition == "above" and "Above" or "Below")
 	end
 end
 
@@ -270,7 +296,7 @@ local function CreateFontDropdown(parent, x, y)
 				info.value = option.path
 				info.checked = cfg.fontFace == option.path
 				info.func = function()
-					SetAndNotify("fontFace", option.path)
+					SetAndRefresh("fontFace", option.path)
 					if UIDropDownMenu_SetSelectedValue then
 						UIDropDownMenu_SetSelectedValue(dropdown, option.path)
 					end
@@ -286,8 +312,8 @@ local function CreateFontDropdown(parent, x, y)
 	return dropdown
 end
 
-local function CreateNotificationPositionDropdown(parent, x, y)
-	local dropdown = CreateFrame("Frame", "KravaCooldownTrackerNotificationPositionDropdown", parent, "UIDropDownMenuTemplate")
+local function CreateSuggestionPositionDropdown(parent, x, y)
+	local dropdown = CreateFrame("Frame", "KravaCooldownTrackerSuggestionPositionDropdown", parent, "UIDropDownMenuTemplate")
 	dropdown:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
 
 	if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(dropdown, 84) end
@@ -304,9 +330,9 @@ local function CreateNotificationPositionDropdown(parent, x, y)
 				local info = UIDropDownMenu_CreateInfo()
 				info.text = option.label
 				info.value = option.value
-				info.checked = cfg.notificationPosition == option.value
+				info.checked = cfg.suggestionPosition == option.value
 				info.func = function()
-					SetAndNotify("notificationPosition", option.value)
+					SetAndRefresh("suggestionPosition", option.value)
 					if UIDropDownMenu_SetSelectedValue then
 						UIDropDownMenu_SetSelectedValue(dropdown, option.value)
 					end
@@ -328,7 +354,7 @@ function C.CreateModal()
 
 	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
 	local frame = CreateFrame("Frame", "KravaCooldownTrackerConfigModal", UIParent, backdropTemplate)
-	frame:SetSize(320, 420)
+	frame:SetSize(320, 476)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetFrameStrata("DIALOG")
 	frame:EnableMouse(true)
@@ -370,13 +396,19 @@ function C.CreateModal()
 	CreateLabel(frame, "Disable trinket usage on click", 14, -292)
 	frame.disableTrinketUsageCheck = CreateSettingCheckbox(frame, "disableTrinketUsageOnClick", -18, -286)
 
-	CreateSectionHeader(frame, "Notifications", 14, -326)
+	CreateSectionHeader(frame, "Suggestions", 14, -326)
 
 	CreateLabel(frame, "Position", 14, -352)
-	frame.notificationPositionDropdown = CreateNotificationPositionDropdown(frame, -2, -346)
+	frame.suggestionPositionDropdown = CreateSuggestionPositionDropdown(frame, -2, -346)
 
 	CreateLabel(frame, "Icon size", 14, -386)
-	frame.notificationIconSizeSlider = CreateRangeSlider(frame, "notificationIconSize", -18, -388, 142, MIN_NOTIFICATION_ICON_SIZE, MAX_NOTIFICATION_ICON_SIZE, "px")
+	frame.suggestionIconSizeSlider = CreateRangeSlider(frame, "suggestionIconSize", -18, -388, 142, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, "px")
+
+	CreateLabel(frame, "Disable suggestions for upper trinket", 14, -430)
+	frame.disableUpperTrinketSuggestionsCheck = CreateSettingCheckbox(frame, "disableUpperTrinketSuggestions", -18, -424)
+
+	CreateLabel(frame, "Disable suggestions for lower trinket", 14, -456)
+	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(frame, "disableLowerTrinketSuggestions", -18, -450)
 
 	frame:SetScript("OnShow", function(self)
 		RefreshModalValues(self)

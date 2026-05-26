@@ -26,17 +26,19 @@ T.ADDON_NAME = "KravaCooldownTracker"
 T.FONT_FACE = STANDARD_TEXT_FONT
 T.FONT_SIZE = 14
 T.DROPDOWN_FONT_SIZE = 12
-T.NOTIFICATION_POSITION = "below"
-T.NOTIFICATION_ICON_SIZE = 18
-T.NOTIFICATION_GAP = 2
-T.NOTIFICATION_SHOW_THRESHOLD = 30
-T.NOTIFICATION_CANDIDATE_THRESHOLD = 30
+T.SUGGESTION_POSITION = "below"
+T.SUGGESTION_ICON_SIZE = 18
+T.SUGGESTION_GAP = 2
+T.SUGGESTION_SHOW_THRESHOLD = 30
+T.SUGGESTION_CANDIDATE_THRESHOLD = 30
+T.DISABLE_UPPER_TRINKET_SUGGESTIONS = false
+T.DISABLE_LOWER_TRINKET_SUGGESTIONS = false
 
 -- runtime refs injected from main
 T.dropdown = {}   -- slotId -> frame
 T.slotIcon = {}   -- slotId -> button
 T.hideToken = {}  -- slotId -> int
-T.notification = {} -- slotId -> frame
+T.suggestion = {} -- slotId -> frame
 
 function T.SetDisplayConfig(cfg)
 	if not cfg then return end
@@ -44,8 +46,10 @@ function T.SetDisplayConfig(cfg)
 	T.FONT_FACE = cfg.fontFace or T.FONT_FACE or STANDARD_TEXT_FONT
 	T.FONT_SIZE = cfg.fontSize or T.FONT_SIZE
 	T.DROPDOWN_FONT_SIZE = math.max(8, math.floor((T.FONT_SIZE or 14) * 0.85 + 0.5))
-	T.NOTIFICATION_POSITION = cfg.notificationPosition or T.NOTIFICATION_POSITION or "below"
-	T.NOTIFICATION_ICON_SIZE = cfg.notificationIconSize or T.NOTIFICATION_ICON_SIZE or 18
+	T.SUGGESTION_POSITION = cfg.suggestionPosition or T.SUGGESTION_POSITION or "below"
+	T.SUGGESTION_ICON_SIZE = cfg.suggestionIconSize or T.SUGGESTION_ICON_SIZE or 18
+	T.DISABLE_UPPER_TRINKET_SUGGESTIONS = cfg.disableUpperTrinketSuggestions and true or false
+	T.DISABLE_LOWER_TRINKET_SUGGESTIONS = cfg.disableLowerTrinketSuggestions and true or false
 end
 
 function T.RefreshDropdowns()
@@ -69,9 +73,9 @@ function T.RefreshDropdowns()
 	end
 end
 
-function T.RefreshNotifications()
+function T.RefreshSuggestions()
 	for _, slotId in ipairs(T.TRINKET_SLOTS) do
-		T.UpdateNotification(slotId)
+		T.UpdateSuggestion(slotId)
 	end
 end
 
@@ -178,7 +182,7 @@ function T.GetBagTrinkets()
 end
 
 -- -------------------------------
--- Notification helpers
+-- Suggestion helpers
 -- -------------------------------
 local function IsUsableTrinketItem(itemId)
 	if not itemId or not IsUsableItem then return false end
@@ -186,20 +190,49 @@ local function IsUsableTrinketItem(itemId)
 	return usable and true or false
 end
 
-function T.GetNotificationCandidates()
+function T.GetSuggestionCandidates()
 	local candidates = {}
+	local passiveCandidates = {}
 
 	for _, it in ipairs(T.GetBagTrinkets()) do
 		if IsUsableTrinketItem(it.itemId) then
 			local cd = H.GetRemainingCooldownForBagSlot(it.bag, it.slot)
-			if cd <= T.NOTIFICATION_CANDIDATE_THRESHOLD then
+			if cd <= T.SUGGESTION_CANDIDATE_THRESHOLD then
 				it.cooldownRemaining = cd
+				it.isUsableSuggestion = true
 				candidates[#candidates + 1] = it
+			end
+		else
+			local cfg = GetItemCfg(it.itemId)
+			if cfg and (cfg.kind == "passive" or cfg.kind == "proc") then
+				it.cooldownRemaining = 0
+				it.isUsableSuggestion = false
+				passiveCandidates[#passiveCandidates + 1] = it
 			end
 		end
 	end
 
+	if #candidates == 0 then
+		return passiveCandidates
+	end
+
 	return candidates
+end
+
+local function HasUsableSuggestionCandidate(candidates)
+	if not candidates then return false end
+	for _, item in ipairs(candidates) do
+		if item.isUsableSuggestion then
+			return true
+		end
+	end
+	return false
+end
+
+local function AreSuggestionsDisabledForSlot(slotId)
+	if slotId == 13 then return T.DISABLE_UPPER_TRINKET_SUGGESTIONS end
+	if slotId == 14 then return T.DISABLE_LOWER_TRINKET_SUGGESTIONS end
+	return false
 end
 
 local function IsEquippedTrinketAuraActive(slotId)
@@ -220,7 +253,7 @@ local function IsEquippedTrinketAuraActive(slotId)
 	return false
 end
 
-function T.GetSlotNotificationCooldown(slotId)
+function T.GetSlotSuggestionCooldown(slotId)
 	local itemId = GetInventoryItemID("player", slotId)
 	if not itemId then return 0 end
 
@@ -247,41 +280,55 @@ function T.GetSlotNotificationCooldown(slotId)
 	return remaining
 end
 
-local function PositionNotificationFrame(slotId)
-	local f = T.notification[slotId]
+function T.ShouldShowSuggestionCandidates(slotId, candidates)
+	if AreSuggestionsDisabledForSlot(slotId) then return false end
+	if not candidates or #candidates == 0 then return false end
+
+	local itemId = GetInventoryItemID("player", slotId)
+	local cfg = GetItemCfg(itemId)
+	if cfg and (cfg.kind == "passive" or cfg.kind == "proc") and HasUsableSuggestionCandidate(candidates) then
+		return true
+	end
+
+	local equippedCooldown = T.GetSlotSuggestionCooldown(slotId)
+	return equippedCooldown > T.SUGGESTION_SHOW_THRESHOLD
+end
+
+local function PositionSuggestionFrame(slotId)
+	local f = T.suggestion[slotId]
 	local owner = T.slotIcon[slotId]
 	if not f or not owner then return end
 
 	f:ClearAllPoints()
-	if T.NOTIFICATION_POSITION == "above" then
-		f:SetPoint("BOTTOM", owner, "TOP", 0, T.NOTIFICATION_GAP)
+	if T.SUGGESTION_POSITION == "above" then
+		f:SetPoint("BOTTOM", owner, "TOP", 0, T.SUGGESTION_GAP)
 	else
-		f:SetPoint("TOP", owner, "BOTTOM", 0, -T.NOTIFICATION_GAP)
+		f:SetPoint("TOP", owner, "BOTTOM", 0, -T.SUGGESTION_GAP)
 	end
 end
 
-function T.CreateNotificationFrame(slotId, owner)
-	if T.notification[slotId] then return T.notification[slotId] end
+function T.CreateSuggestionFrame(slotId, owner)
+	if T.suggestion[slotId] then return T.suggestion[slotId] end
 	if not owner then return nil end
 
-	local f = CreateFrame("Frame", T.ADDON_NAME .. "NotificationFrame" .. slotId, UIParent)
+	local f = CreateFrame("Frame", T.ADDON_NAME .. "SuggestionFrame" .. slotId, UIParent)
 	f:SetFrameStrata("HIGH")
 	f:SetClampedToScreen(true)
 	f.buttons = {}
-	T.notification[slotId] = f
-	PositionNotificationFrame(slotId)
+	T.suggestion[slotId] = f
+	PositionSuggestionFrame(slotId)
 	f:Hide()
 	return f
 end
 
-local function GetOrCreateNotificationButton(slotId, index)
-	local f = T.notification[slotId]
+local function GetOrCreateSuggestionButton(slotId, index)
+	local f = T.suggestion[slotId]
 	if not f then return nil end
 
 	local btn = f.buttons[index]
 	if btn then return btn end
 
-	btn = CreateFrame("Button", T.ADDON_NAME .. "NotificationButton" .. slotId .. "_" .. index, f)
+	btn = CreateFrame("Button", T.ADDON_NAME .. "SuggestionButton" .. slotId .. "_" .. index, f)
 	btn:EnableMouse(true)
 	btn:RegisterForClicks("LeftButtonDown")
 
@@ -295,7 +342,7 @@ local function GetOrCreateNotificationButton(slotId, index)
 	btn.hl:SetBlendMode("ADD")
 
 	btn.timeText = btn:CreateFontString(nil, "OVERLAY")
-	btn.timeText:SetFont(STANDARD_TEXT_FONT or UNIT_NAME_FONT or "Fonts\\FRIZQT__.TTF", math.max(8, math.floor((T.NOTIFICATION_ICON_SIZE or 18) * 0.55 + 0.5)), "OUTLINE")
+	btn.timeText:SetFont(STANDARD_TEXT_FONT or UNIT_NAME_FONT or "Fonts\\FRIZQT__.TTF", math.max(8, math.floor((T.SUGGESTION_ICON_SIZE or 18) * 0.55 + 0.5)), "OUTLINE")
 	btn.timeText:SetPoint("CENTER", btn, "CENTER", 0, -1)
 	btn.timeText:SetText("")
 
@@ -303,28 +350,28 @@ local function GetOrCreateNotificationButton(slotId, index)
 	return btn
 end
 
-local function ApplyNotificationTextFont(fontString, size)
+local function ApplySuggestionTextFont(fontString, size)
 	if not fontString then return end
 
-	size = size or math.max(8, math.floor((T.NOTIFICATION_ICON_SIZE or 18) * 0.55 + 0.5))
+	size = size or math.max(8, math.floor((T.SUGGESTION_ICON_SIZE or 18) * 0.55 + 0.5))
 	if T.FONT_FACE and fontString:SetFont(T.FONT_FACE, size, "OUTLINE") then
 		return
 	end
 	fontString:SetFont(STANDARD_TEXT_FONT or UNIT_NAME_FONT or "Fonts\\FRIZQT__.TTF", size, "OUTLINE")
 end
 
-local function ConfigureNotificationButton(slotId, index, item)
-	local f = T.notification[slotId]
-	local btn = GetOrCreateNotificationButton(slotId, index)
+local function ConfigureSuggestionButton(slotId, index, item)
+	local f = T.suggestion[slotId]
+	local btn = GetOrCreateSuggestionButton(slotId, index)
 	if not f or not btn or not item then return end
 
-	local iconSize = T.NOTIFICATION_ICON_SIZE or 18
+	local iconSize = T.SUGGESTION_ICON_SIZE or 18
 	btn:SetSize(iconSize, iconSize)
 	btn:ClearAllPoints()
 	btn:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -((index - 1) * iconSize))
 	btn.tex:SetTexture(item.icon or H.DEFAULT_ICON_FILEID)
 	btn.tex:SetVertexColor(1, 1, 1, 1)
-	ApplyNotificationTextFont(btn.timeText, math.max(8, math.floor(iconSize * 0.55 + 0.5)))
+	ApplySuggestionTextFont(btn.timeText, math.max(8, math.floor(iconSize * 0.55 + 0.5)))
 
 	local cd = item.cooldownRemaining or 0
 	if cd > 0 then
@@ -340,33 +387,27 @@ local function ConfigureNotificationButton(slotId, index, item)
 	btn:Show()
 end
 
-function T.UpdateNotification(slotId)
+function T.UpdateSuggestion(slotId)
 	local owner = T.slotIcon[slotId]
-	local f = T.notification[slotId]
+	local f = T.suggestion[slotId]
 	if not owner then return end
-	if not f then f = T.CreateNotificationFrame(slotId, owner) end
+	if not f then f = T.CreateSuggestionFrame(slotId, owner) end
 	if not f then return end
 
-	PositionNotificationFrame(slotId)
+	PositionSuggestionFrame(slotId)
 
 	if IsEquippedTrinketAuraActive(slotId) then
 		f:Hide()
 		return
 	end
 
-	local equippedCooldown = T.GetSlotNotificationCooldown(slotId)
-	if equippedCooldown <= T.NOTIFICATION_SHOW_THRESHOLD then
+	local candidates = T.GetSuggestionCandidates()
+	if not T.ShouldShowSuggestionCandidates(slotId, candidates) then
 		f:Hide()
 		return
 	end
 
-	local candidates = T.GetNotificationCandidates()
-	if #candidates == 0 then
-		f:Hide()
-		return
-	end
-
-	local iconSize = T.NOTIFICATION_ICON_SIZE or 18
+	local iconSize = T.SUGGESTION_ICON_SIZE or 18
 	f:SetSize(iconSize, #candidates * iconSize)
 
 	for _, btn in ipairs(f.buttons) do
@@ -376,7 +417,7 @@ function T.UpdateNotification(slotId)
 	end
 
 	for index, item in ipairs(candidates) do
-		ConfigureNotificationButton(slotId, index, item)
+		ConfigureSuggestionButton(slotId, index, item)
 	end
 
 	f:Show()

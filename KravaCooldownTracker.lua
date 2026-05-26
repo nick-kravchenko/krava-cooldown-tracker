@@ -35,8 +35,10 @@ local function GetConfig()
 		fontSize = 14,
 		locked = true,
 		disableTrinketUsageOnClick = true,
-		notificationPosition = "below",
-		notificationIconSize = 18,
+		disableUpperTrinketSuggestions = true,
+		disableLowerTrinketSuggestions = true,
+		suggestionPosition = "below",
+		suggestionIconSize = 18,
 	}
 end
 
@@ -314,8 +316,8 @@ local function RefreshTrackerDisplay()
 	if T.RefreshDropdowns then
 		T.RefreshDropdowns()
 	end
-	if T.RefreshNotifications then
-		T.RefreshNotifications()
+	if T.RefreshSuggestions then
+		T.RefreshSuggestions()
 	end
 
 	if leftDragHandle and leftDragHandle.ApplyDisplayConfig then
@@ -344,8 +346,8 @@ local function OnUpdate(_, elapsed)
 			if T.slotIcon[slotId].UpdateQueuedIcon then
 				T.slotIcon[slotId]:UpdateQueuedIcon()
 			end
-			if T.UpdateNotification then
-				T.UpdateNotification(slotId)
+			if T.UpdateSuggestion then
+				T.UpdateSuggestion(slotId)
 			end
 		end
 	end
@@ -374,9 +376,9 @@ loader:SetScript("OnEvent", function(_, event, ...)
 		local cont = CreateContainer()
 		CreateSlotIcon(13, cont, 0)
 		CreateSlotIcon(14, cont, GetIconSize() + GAP_BETWEEN)
-		if T.CreateNotificationFrame then
-			T.CreateNotificationFrame(13, T.slotIcon[13])
-			T.CreateNotificationFrame(14, T.slotIcon[14])
+		if T.CreateSuggestionFrame then
+			T.CreateSuggestionFrame(13, T.slotIcon[13])
+			T.CreateSuggestionFrame(14, T.slotIcon[14])
 		end
 		leftDragHandle = CreateDragHandle(cont, "Left")
 		rightDragHandle = CreateDragHandle(cont, "Right")
@@ -390,8 +392,8 @@ loader:SetScript("OnEvent", function(_, event, ...)
 
 	if event == "PLAYER_EQUIPMENT_CHANGED" then
 		T.OnEquipmentChanged(...)
-		if T.UpdateNotification then
-			T.UpdateNotification((...))
+		if T.UpdateSuggestion then
+			T.UpdateSuggestion((...))
 		end
 		return
 	end
@@ -401,8 +403,8 @@ loader:SetScript("OnEvent", function(_, event, ...)
 			if T.dropdown[slotId] and T.dropdown[slotId]:IsShown() then
 				T.UpdateDropdown(slotId)
 			end
-			if T.UpdateNotification then
-				T.UpdateNotification(slotId)
+			if T.UpdateSuggestion then
+				T.UpdateSuggestion(slotId)
 			end
 		end
 		return
@@ -411,8 +413,8 @@ loader:SetScript("OnEvent", function(_, event, ...)
 	if event == "PLAYER_REGEN_ENABLED" then
 		RefreshTrackerDisplay()
 		T.OnCombatEnded(containerFrame)
-		if T.RefreshNotifications then
-			T.RefreshNotifications()
+		if T.RefreshSuggestions then
+			T.RefreshSuggestions()
 		end
 		return
 	end

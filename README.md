@@ -106,11 +106,13 @@ KravaCooldownTrackerDB.config = {
   fontSize = 14,
   locked = true,
   disableTrinketUsageOnClick = true,
+  disableUpperTrinketSuggestions = true,
+  disableLowerTrinketSuggestions = true,
 }
 ```
 
 Right-clicking a main trinket icon clears this saved position and restores the default placement.
-New users are locked by default, and main-icon trinket usage is disabled by default. Unlocking in `/kct` shows minimal drag handles on the left and right of the trinket pair.
+New users are locked by default, main-icon trinket usage is disabled by default, and suggestions are disabled for both trinket slots. Unlocking in `/kct` shows minimal drag handles on the left and right of the trinket pair.
 
 ## Trinket Metadata
 
