@@ -1,0 +1,31 @@
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# VS Code and AI editors
+.vscode/
+.cursor/
+.windsurf/
+
+# AI assistant state and local config
+.ai/
+.aider*
+.claude/
+.codex/
+.continue/
+.cline/
+.roo/
+.superpowers/
+AGENTS.local.md
+CLAUDE.local.md
+
+# Local MCP and assistant caches
+.mcp/
+.serena/
+
+
+docs/
+tests/

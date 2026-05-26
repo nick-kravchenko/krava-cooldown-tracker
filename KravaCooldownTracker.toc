@@ -1,0 +1,12 @@
+## Interface: 20505
+## Title: KravaCooldownTracker
+## Notes: Trinkets and bursts menu with CDs and auras
+## Author: Krava
+## Version: 0.0.1
+## SavedVariables: KravaCooldownTrackerDB
+
+KravaCooldownTracker_Trinkets.lua
+KravaCooldownTracker_Helpers.lua
+KravaCooldownTracker_Config.lua
+KravaCooldownTracker_TrinketLogic.lua
+KravaCooldownTracker.lua
