@@ -24,7 +24,7 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Applies a synthetic 30 second equip lockout timer after equipping configured active/proc trinkets or unknown trinkets without a detectable item cooldown.
 - Shows a small queued-item overlay when a combat-locked swap or unequip is waiting.
 - Saves the trinket frame position and display settings in `KravaCooldownTrackerDB`.
-- Opens a compact immediate-apply config modal with `/kct`, including a default-on option to prevent main-icon clicks from using equipped trinkets.
+- Opens a compact immediate-apply config modal with `/kct`, including a default-on option to prevent main-icon clicks from using equipped trinkets and a selectable suggestion-available sound.
 
 ## Controls
 
@@ -108,6 +108,7 @@ KravaCooldownTrackerDB.config = {
   disableTrinketUsageOnClick = true,
   disableUpperTrinketSuggestions = true,
   disableLowerTrinketSuggestions = true,
+  suggestionAvailableSound = "none",
 }
 ```
 

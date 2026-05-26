@@ -31,6 +31,7 @@ T.SUGGESTION_ICON_SIZE = 18
 T.SUGGESTION_GAP = 2
 T.SUGGESTION_SHOW_THRESHOLD = 30
 T.SUGGESTION_CANDIDATE_THRESHOLD = 30
+T.SUGGESTION_AVAILABLE_SOUND = "none"
 T.DISABLE_UPPER_TRINKET_SUGGESTIONS = false
 T.DISABLE_LOWER_TRINKET_SUGGESTIONS = false
 
@@ -48,6 +49,7 @@ function T.SetDisplayConfig(cfg)
 	T.DROPDOWN_FONT_SIZE = math.max(8, math.floor((T.FONT_SIZE or 14) * 0.85 + 0.5))
 	T.SUGGESTION_POSITION = cfg.suggestionPosition or T.SUGGESTION_POSITION or "below"
 	T.SUGGESTION_ICON_SIZE = cfg.suggestionIconSize or T.SUGGESTION_ICON_SIZE or 18
+	T.SUGGESTION_AVAILABLE_SOUND = cfg.suggestionAvailableSound or "none"
 	T.DISABLE_UPPER_TRINKET_SUGGESTIONS = cfg.disableUpperTrinketSuggestions and true or false
 	T.DISABLE_LOWER_TRINKET_SUGGESTIONS = cfg.disableLowerTrinketSuggestions and true or false
 end
@@ -418,6 +420,13 @@ function T.UpdateSuggestion(slotId)
 
 	for index, item in ipairs(candidates) do
 		ConfigureSuggestionButton(slotId, index, item)
+	end
+
+	if not f:IsShown() and T.SUGGESTION_AVAILABLE_SOUND ~= "none" then
+		local config = KravaCooldownTracker_Config
+		if config and config.PlaySuggestionAvailableSound then
+			config.PlaySuggestionAvailableSound(T.SUGGESTION_AVAILABLE_SOUND)
+		end
 	end
 
 	f:Show()

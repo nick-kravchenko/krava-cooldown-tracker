@@ -13,6 +13,7 @@ local DEFAULT_DISABLE_UPPER_TRINKET_SUGGESTIONS = true
 local DEFAULT_DISABLE_LOWER_TRINKET_SUGGESTIONS = true
 local DEFAULT_SUGGESTION_POSITION = "below"
 local DEFAULT_SUGGESTION_ICON_SIZE = 18
+local DEFAULT_SUGGESTION_AVAILABLE_SOUND = "none"
 
 local MIN_MAIN_ICON_SIZE = 14
 local MAX_MAIN_ICON_SIZE = 48
@@ -22,6 +23,17 @@ local MIN_FONT_SIZE = 14
 local MAX_FONT_SIZE = 48
 local MIN_SUGGESTION_ICON_SIZE = 14
 local MAX_SUGGESTION_ICON_SIZE = 48
+local DROPDOWN_ROW_HEIGHT = 24
+local MAX_DROPDOWN_ROWS = 7
+
+local HORN_ICON = "Interface\\Icons\\INV_Misc_Horn_01"
+
+local FALLBACK_SUGGESTION_SOUND_OPTIONS = {
+	{ label = "None", value = "none" },
+	{ label = "Raid Warning", value = "raid-warning", soundKit = "RAID_WARNING" },
+	{ label = "Ready Check", value = "ready-check", soundKit = "READY_CHECK" },
+	{ label = "Map Ping", value = "map-ping", soundKit = "MAP_PING" },
+}
 
 local function ClampNumber(value, minValue, maxValue, fallback)
 	value = tonumber(value)
@@ -66,6 +78,16 @@ local function GetSharedMedia()
 	return LibStub("LibSharedMedia-3.0", true)
 end
 
+local function GetSharedMediaType(media, fallback)
+	return media and media.MediaType and media.MediaType[fallback] or string.lower(fallback)
+end
+
+local function AddSoundOption(options, seen, label, value, path, soundKit)
+	if type(label) ~= "string" or label == "" or seen[value] then return end
+	seen[value] = true
+	options[#options + 1] = { label = label, value = value, path = path, soundKit = soundKit }
+end
+
 local function AddSharedMediaFonts(options, seen)
 	local media = GetSharedMedia()
 	if not media or not media.List or not media.Fetch then return end
@@ -100,6 +122,73 @@ function C.GetDefaultFont()
 	return GetDefaultFont()
 end
 
+function C.GetSuggestionSoundOptions()
+	local options = {}
+	local seen = {}
+
+	AddSoundOption(options, seen, "None", "none")
+
+	local media = GetSharedMedia()
+	if media and media.List and media.Fetch then
+		local soundType = GetSharedMediaType(media, "SOUND")
+		local sounds = media:List(soundType)
+		if type(sounds) == "table" then
+			table.sort(sounds)
+			for _, name in ipairs(sounds) do
+				local path = media:Fetch(soundType, name, true)
+				if name ~= "None" and path then
+					AddSoundOption(options, seen, name, name, path)
+				end
+			end
+		end
+	end
+
+	for _, option in ipairs(FALLBACK_SUGGESTION_SOUND_OPTIONS) do
+		AddSoundOption(options, seen, option.label, option.value, option.path, option.soundKit)
+	end
+
+	return options
+end
+
+local function GetSuggestionSoundOption(value)
+	for _, option in ipairs(C.GetSuggestionSoundOptions()) do
+		if option.value == value then return option end
+	end
+	return nil
+end
+
+local function NormalizeSuggestionAvailableSound(value)
+	if GetSuggestionSoundOption(value) then return value end
+	return DEFAULT_SUGGESTION_AVAILABLE_SOUND
+end
+
+local function GetSuggestionSoundLabel(value)
+	local option = GetSuggestionSoundOption(value)
+	return option and option.label or "None"
+end
+
+function C.GetSuggestionSoundLabel(value)
+	return GetSuggestionSoundLabel(value)
+end
+
+function C.PlaySuggestionAvailableSound(value)
+	local option = GetSuggestionSoundOption(value)
+	if not option or option.value == "none" then return end
+
+	if option.path and PlaySoundFile then
+		PlaySoundFile(option.path, "Master")
+		return
+	end
+
+	local soundKit = option.soundKit
+	if type(soundKit) == "string" and SOUNDKIT then
+		soundKit = SOUNDKIT[soundKit]
+	end
+	if soundKit and PlaySound then
+		PlaySound(soundKit, "Master")
+	end
+end
+
 function C.Normalize()
 	local cfg = EnsureDB()
 
@@ -118,6 +207,7 @@ function C.Normalize()
 	cfg[legacyPositionKey] = nil
 	cfg.suggestionIconSize = ClampNumber(cfg.suggestionIconSize, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, DEFAULT_SUGGESTION_ICON_SIZE)
 	cfg.suggestionPosition = NormalizeSuggestionPosition(cfg.suggestionPosition)
+	cfg.suggestionAvailableSound = NormalizeSuggestionAvailableSound(cfg.suggestionAvailableSound)
 
 	if not IsUsableFontPath(cfg.fontFace) then
 		cfg.fontFace = GetDefaultFont()
@@ -272,78 +362,414 @@ local function RefreshModalValues(frame)
 	if frame.disableLowerTrinketSuggestionsCheck then frame.disableLowerTrinketSuggestionsCheck:SetChecked(cfg.disableLowerTrinketSuggestions) end
 	if frame.suggestionIconSizeSlider then frame.suggestionIconSizeSlider:SetValue(cfg.suggestionIconSize) end
 
-	if frame.fontDropdown and UIDropDownMenu_SetText then
-		UIDropDownMenu_SetText(frame.fontDropdown, GetFontLabel(cfg.fontFace))
+	if frame.fontDropdown and frame.fontDropdown.Refresh then
+		frame.fontDropdown:Refresh(cfg)
 	end
 
-	if frame.suggestionPositionDropdown and UIDropDownMenu_SetText then
-		UIDropDownMenu_SetText(frame.suggestionPositionDropdown, cfg.suggestionPosition == "above" and "Above" or "Below")
+	if frame.suggestionPositionDropdown and frame.suggestionPositionDropdown.Refresh then
+		frame.suggestionPositionDropdown:Refresh(cfg)
+	end
+
+	if frame.suggestionAvailableSoundDropdown and frame.suggestionAvailableSoundDropdown.Refresh then
+		frame.suggestionAvailableSoundDropdown:Refresh(cfg)
 	end
 end
 
+local StyleDropdownButton
+
 local function CreateFontDropdown(parent, x, y)
-	local dropdown = CreateFrame("Frame", "KravaCooldownTrackerFontDropdown", parent, "UIDropDownMenuTemplate")
+	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
+	local dropdown = CreateFrame("Button", "KravaCooldownTrackerFontDropdown", parent, backdropTemplate)
+	dropdown:SetSize(172, 22)
 	dropdown:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
+	StyleDropdownButton(dropdown)
 
-	if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(dropdown, 172) end
+	dropdown.text = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
+	dropdown.text:SetPoint("RIGHT", dropdown, "RIGHT", -26, 0)
+	dropdown.text:SetJustifyH("LEFT")
 
-	if UIDropDownMenu_Initialize then
-		UIDropDownMenu_Initialize(dropdown, function(self, level)
-			local cfg = C.Get()
-			for _, option in ipairs(C.GetFontOptions()) do
-				local info = UIDropDownMenu_CreateInfo()
-				info.text = option.label
-				info.value = option.path
-				info.checked = cfg.fontFace == option.path
-				info.func = function()
-					SetAndRefresh("fontFace", option.path)
-					if UIDropDownMenu_SetSelectedValue then
-						UIDropDownMenu_SetSelectedValue(dropdown, option.path)
-					end
-					if UIDropDownMenu_SetText then
-						UIDropDownMenu_SetText(dropdown, option.label)
-					end
-				end
-				UIDropDownMenu_AddButton(info, level)
-			end
-		end)
+	dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.arrow:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
+	dropdown.arrow:SetText("v")
+
+	local menu = CreateFrame("Frame", "KravaCooldownTrackerFontMenu", dropdown, backdropTemplate)
+	menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+	menu:SetFrameStrata("DIALOG")
+	menu:SetFrameLevel(dropdown:GetFrameLevel() + 10)
+	menu.rows = {}
+	StylePanel(menu)
+	menu:Hide()
+	dropdown.menu = menu
+
+	local function SelectFont(path)
+		SetAndRefresh("fontFace", path)
+		dropdown:Refresh(C.Get())
+		menu:Hide()
 	end
+
+	local ScrollRows
+
+	local function ClampMenuOffset(options)
+		local maxOffset = math.max(1, #options - MAX_DROPDOWN_ROWS + 1)
+		menu.offset = math.min(math.max(menu.offset or 1, 1), maxOffset)
+	end
+
+	local function EnsureRows(options)
+		local visibleCount = math.min(#options, MAX_DROPDOWN_ROWS)
+		menu:SetSize(172, (visibleCount * DROPDOWN_ROW_HEIGHT) + 4)
+
+		for rowIndex = 1, MAX_DROPDOWN_ROWS do
+			local row = menu.rows[rowIndex]
+			if not row then
+				row = CreateFrame("Button", nil, menu)
+				row:SetSize(168, DROPDOWN_ROW_HEIGHT)
+				row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -2 - ((rowIndex - 1) * DROPDOWN_ROW_HEIGHT))
+				row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+				row.text:SetPoint("LEFT", row, "LEFT", 7, 0)
+				row.text:SetPoint("RIGHT", row, "RIGHT", -7, 0)
+				row.text:SetJustifyH("LEFT")
+				row:SetScript("OnClick", function(self)
+					if self.option then
+						SelectFont(self.option.path)
+					end
+				end)
+				row:EnableMouseWheel(true)
+				row:SetScript("OnMouseWheel", function(_, delta)
+					if ScrollRows then ScrollRows(delta) end
+				end)
+				menu.rows[rowIndex] = row
+			end
+		end
+	end
+
+	local function RenderRows(cfg)
+		cfg = cfg or C.Get()
+		local options = C.GetFontOptions()
+		if not menu.offset then
+			for index, option in ipairs(options) do
+				if option.path == cfg.fontFace then
+					local maxOffset = math.max(1, #options - MAX_DROPDOWN_ROWS + 1)
+					menu.offset = math.min(math.max(index - math.floor(MAX_DROPDOWN_ROWS / 2), 1), maxOffset)
+					break
+				end
+			end
+		end
+		ClampMenuOffset(options)
+		EnsureRows(options)
+
+		for rowIndex, row in ipairs(menu.rows) do
+			local option = options[(menu.offset or 1) + rowIndex - 1]
+			row.option = option
+			if option then
+				row.text:SetText(option.label)
+				if option.path == cfg.fontFace then
+					row.text:SetTextColor(1, 0.82, 0, 1)
+				else
+					row.text:SetTextColor(1, 1, 1, 1)
+				end
+				row:Show()
+			else
+				row:Hide()
+			end
+		end
+
+		return options
+	end
+
+	ScrollRows = function(delta)
+		local options = C.GetFontOptions()
+		local maxOffset = math.max(1, #options - MAX_DROPDOWN_ROWS + 1)
+		if delta < 0 then
+			menu.offset = math.min((menu.offset or 1) + 1, maxOffset)
+		elseif delta > 0 then
+			menu.offset = math.max((menu.offset or 1) - 1, 1)
+		end
+		RenderRows(C.Get())
+	end
+
+	function dropdown:Refresh(cfg)
+		cfg = cfg or C.Get()
+		self.text:SetText(GetFontLabel(cfg.fontFace))
+		RenderRows(cfg)
+	end
+
+	menu:EnableMouseWheel(true)
+	menu:SetScript("OnMouseWheel", function(_, delta)
+		ScrollRows(delta)
+	end)
+
+	dropdown:SetScript("OnClick", function()
+		if menu:IsShown() then
+			menu:Hide()
+		else
+			menu.offset = nil
+			dropdown:Refresh(C.Get())
+			menu:Show()
+		end
+	end)
 
 	return dropdown
 end
 
 local function CreateSuggestionPositionDropdown(parent, x, y)
-	local dropdown = CreateFrame("Frame", "KravaCooldownTrackerSuggestionPositionDropdown", parent, "UIDropDownMenuTemplate")
+	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
+	local dropdown = CreateFrame("Button", "KravaCooldownTrackerSuggestionPositionDropdown", parent, backdropTemplate)
+	dropdown:SetSize(84, 22)
 	dropdown:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
+	StyleDropdownButton(dropdown)
 
-	if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(dropdown, 84) end
+	dropdown.text = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
+	dropdown.text:SetPoint("RIGHT", dropdown, "RIGHT", -24, 0)
+	dropdown.text:SetJustifyH("LEFT")
 
-	if UIDropDownMenu_Initialize then
-		UIDropDownMenu_Initialize(dropdown, function(self, level)
-			local cfg = C.Get()
-			local options = {
-				{ label = "Below", value = "below" },
-				{ label = "Above", value = "above" },
-			}
+	dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.arrow:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
+	dropdown.arrow:SetText("v")
 
-			for _, option in ipairs(options) do
-				local info = UIDropDownMenu_CreateInfo()
-				info.text = option.label
-				info.value = option.value
-				info.checked = cfg.suggestionPosition == option.value
-				info.func = function()
-					SetAndRefresh("suggestionPosition", option.value)
-					if UIDropDownMenu_SetSelectedValue then
-						UIDropDownMenu_SetSelectedValue(dropdown, option.value)
-					end
-					if UIDropDownMenu_SetText then
-						UIDropDownMenu_SetText(dropdown, option.label)
-					end
-				end
-				UIDropDownMenu_AddButton(info, level)
-			end
-		end)
+	local options = {
+		{ label = "Below", value = "below" },
+		{ label = "Above", value = "above" },
+	}
+
+	local menu = CreateFrame("Frame", "KravaCooldownTrackerSuggestionPositionMenu", dropdown, backdropTemplate)
+	menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+	menu:SetSize(84, (#options * DROPDOWN_ROW_HEIGHT) + 4)
+	menu:SetFrameStrata("DIALOG")
+	menu:SetFrameLevel(dropdown:GetFrameLevel() + 10)
+	menu.rows = {}
+	StylePanel(menu)
+	menu:Hide()
+	dropdown.menu = menu
+
+	local function SelectPosition(value)
+		SetAndRefresh("suggestionPosition", value)
+		dropdown:Refresh(C.Get())
+		menu:Hide()
 	end
+
+	for index, option in ipairs(options) do
+		local row = CreateFrame("Button", nil, menu)
+		row:SetSize(80, DROPDOWN_ROW_HEIGHT)
+		row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -2 - ((index - 1) * DROPDOWN_ROW_HEIGHT))
+		row.option = option
+		row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		row.text:SetPoint("LEFT", row, "LEFT", 7, 0)
+		row.text:SetPoint("RIGHT", row, "RIGHT", -7, 0)
+		row.text:SetJustifyH("LEFT")
+		row.text:SetText(option.label)
+		row:SetScript("OnClick", function(self)
+			SelectPosition(self.option.value)
+		end)
+		menu.rows[index] = row
+	end
+
+	function dropdown:Refresh(cfg)
+		cfg = cfg or C.Get()
+		local label = cfg.suggestionPosition == "above" and "Above" or "Below"
+		self.text:SetText(label)
+		for _, row in ipairs(menu.rows) do
+			if row.option.value == cfg.suggestionPosition then
+				row.text:SetTextColor(1, 0.82, 0, 1)
+			else
+				row.text:SetTextColor(1, 1, 1, 1)
+			end
+		end
+	end
+
+	dropdown:SetScript("OnClick", function()
+		if menu:IsShown() then
+			menu:Hide()
+		else
+			dropdown:Refresh(C.Get())
+			menu:Show()
+		end
+	end)
+
+	return dropdown
+end
+
+function StyleDropdownButton(button)
+	if button.SetBackdrop then
+		button:SetBackdrop({
+			bgFile = "Interface\\Buttons\\WHITE8x8",
+			edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+			tile = false,
+			edgeSize = 8,
+			insets = { left = 2, right = 2, top = 2, bottom = 2 },
+		})
+		button:SetBackdropColor(0.08, 0.08, 0.09, 0.94)
+		button:SetBackdropBorderColor(0.36, 0.36, 0.36, 0.9)
+	end
+end
+
+local function CreateSuggestionSoundDropdown(parent, x, y)
+	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
+	local dropdown = CreateFrame("Button", "KravaCooldownTrackerSuggestionSoundDropdown", parent, backdropTemplate)
+	dropdown:SetSize(172, 22)
+	dropdown:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
+	StyleDropdownButton(dropdown)
+
+	dropdown.text = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
+	dropdown.text:SetPoint("RIGHT", dropdown, "RIGHT", -26, 0)
+	dropdown.text:SetJustifyH("LEFT")
+
+	dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.arrow:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
+	dropdown.arrow:SetText("v")
+
+	local menu = CreateFrame("Frame", "KravaCooldownTrackerSuggestionSoundMenu", dropdown, backdropTemplate)
+	menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+	menu:SetFrameStrata("DIALOG")
+	menu:SetFrameLevel(dropdown:GetFrameLevel() + 10)
+	menu.rows = {}
+	StylePanel(menu)
+	menu:Hide()
+	dropdown.menu = menu
+
+	local function SelectSound(value)
+		SetAndRefresh("suggestionAvailableSound", value)
+		dropdown:Refresh(C.Get())
+		menu:Hide()
+	end
+
+	local ScrollRows
+
+	local function ClampMenuOffset()
+		local options = C.GetSuggestionSoundOptions()
+		local maxOffset = math.max(1, #options - MAX_DROPDOWN_ROWS + 1)
+		menu.offset = math.min(math.max(menu.offset or 1, 1), maxOffset)
+	end
+
+	local function EnsureRows(options)
+		local visibleCount = math.min(#options, MAX_DROPDOWN_ROWS)
+		menu:SetSize(172, (visibleCount * DROPDOWN_ROW_HEIGHT) + 4)
+
+		for rowIndex = 1, MAX_DROPDOWN_ROWS do
+			local row = menu.rows[rowIndex]
+			if not row then
+				row = CreateFrame("Frame", nil, menu)
+				row:SetSize(168, DROPDOWN_ROW_HEIGHT)
+				row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -2 - ((rowIndex - 1) * DROPDOWN_ROW_HEIGHT))
+
+				row.select = CreateFrame("Button", nil, row)
+				row.select:SetPoint("LEFT", row, "LEFT", 2, 0)
+				row.select:SetPoint("RIGHT", row, "RIGHT", -26, 0)
+				row.select:SetHeight(20)
+
+				row.text = row.select:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+				row.text:SetPoint("LEFT", row.select, "LEFT", 5, 0)
+				row.text:SetPoint("RIGHT", row.select, "RIGHT", -4, 0)
+				row.text:SetJustifyH("LEFT")
+
+				row.preview = CreateFrame("Button", nil, row)
+				row.preview:SetSize(20, 20)
+				row.preview:SetPoint("RIGHT", row, "RIGHT", -3, 0)
+				row.preview.icon = row.preview:CreateTexture(nil, "ARTWORK")
+				row.preview.icon:SetAllPoints(row.preview)
+				row.preview.icon:SetTexture(HORN_ICON)
+				row.preview.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+				row.select:SetScript("OnClick", function(self)
+					if self:GetParent().option then
+						SelectSound(self:GetParent().option.value)
+					end
+				end)
+				row.preview:SetScript("OnClick", function(self)
+					if self:GetParent().option then
+						C.PlaySuggestionAvailableSound(self:GetParent().option.value)
+					end
+				end)
+				row:EnableMouseWheel(true)
+				row:SetScript("OnMouseWheel", function(_, delta)
+					if ScrollRows then ScrollRows(delta) end
+				end)
+				row.select:EnableMouseWheel(true)
+				row.select:SetScript("OnMouseWheel", function(_, delta)
+					if ScrollRows then ScrollRows(delta) end
+				end)
+				row.preview:EnableMouseWheel(true)
+				row.preview:SetScript("OnMouseWheel", function(_, delta)
+					if ScrollRows then ScrollRows(delta) end
+				end)
+
+				menu.rows[rowIndex] = row
+			end
+		end
+	end
+
+	local function RenderRows(cfg)
+		cfg = cfg or C.Get()
+		local options = C.GetSuggestionSoundOptions()
+		if not menu.offset then
+			for index, option in ipairs(options) do
+				if option.value == cfg.suggestionAvailableSound then
+					local maxOffset = math.max(1, #options - MAX_DROPDOWN_ROWS + 1)
+					menu.offset = math.min(math.max(index - math.floor(MAX_DROPDOWN_ROWS / 2), 1), maxOffset)
+					break
+				end
+			end
+		end
+		ClampMenuOffset()
+		EnsureRows(options)
+
+		for rowIndex, row in ipairs(menu.rows) do
+			local option = options[(menu.offset or 1) + rowIndex - 1]
+			row.option = option
+			if option then
+				row.text:SetText(option.label)
+				if option.value == cfg.suggestionAvailableSound then
+					row.text:SetTextColor(1, 0.82, 0, 1)
+				else
+					row.text:SetTextColor(1, 1, 1, 1)
+				end
+				if option.value == "none" then
+					row.preview.icon:SetDesaturated(true)
+					row.preview.icon:SetVertexColor(0.55, 0.55, 0.55, 1)
+				else
+					row.preview.icon:SetDesaturated(false)
+					row.preview.icon:SetVertexColor(1, 1, 1, 1)
+				end
+				row:Show()
+			else
+				row:Hide()
+			end
+		end
+	end
+
+	function dropdown:Refresh(cfg)
+		cfg = cfg or C.Get()
+		self.text:SetText(GetSuggestionSoundLabel(cfg.suggestionAvailableSound))
+		RenderRows(cfg)
+	end
+
+	ScrollRows = function(delta)
+		local options = C.GetSuggestionSoundOptions()
+		local maxOffset = math.max(1, #options - MAX_DROPDOWN_ROWS + 1)
+		if delta < 0 then
+			menu.offset = math.min((menu.offset or 1) + 1, maxOffset)
+		elseif delta > 0 then
+			menu.offset = math.max((menu.offset or 1) - 1, 1)
+		end
+		RenderRows(C.Get())
+	end
+
+	menu:EnableMouseWheel(true)
+	menu:SetScript("OnMouseWheel", function(_, delta)
+		if ScrollRows then ScrollRows(delta) end
+	end)
+
+	dropdown:SetScript("OnClick", function()
+		if menu:IsShown() then
+			menu:Hide()
+		else
+			menu.offset = nil
+			dropdown:Refresh(C.Get())
+			menu:Show()
+		end
+	end)
 
 	return dropdown
 end
@@ -354,7 +780,7 @@ function C.CreateModal()
 
 	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
 	local frame = CreateFrame("Frame", "KravaCooldownTrackerConfigModal", UIParent, backdropTemplate)
-	frame:SetSize(320, 476)
+	frame:SetSize(320, 524)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetFrameStrata("DIALOG")
 	frame:EnableMouse(true)
@@ -380,7 +806,7 @@ function C.CreateModal()
 	frame.lockedCheck = CreateSettingCheckbox(frame, "locked", -18, -58)
 
 	CreateLabel(frame, "Font", 14, -90)
-	frame.fontDropdown = CreateFontDropdown(frame, -2, -84)
+	frame.fontDropdown = CreateFontDropdown(frame, -18, -84)
 
 	CreateLabel(frame, "Font size", 14, -132)
 	frame.fontSizeSlider = CreateRangeSlider(frame, "fontSize", -18, -134, 142, MIN_FONT_SIZE, MAX_FONT_SIZE, "px")
@@ -399,16 +825,19 @@ function C.CreateModal()
 	CreateSectionHeader(frame, "Suggestions", 14, -326)
 
 	CreateLabel(frame, "Position", 14, -352)
-	frame.suggestionPositionDropdown = CreateSuggestionPositionDropdown(frame, -2, -346)
+	frame.suggestionPositionDropdown = CreateSuggestionPositionDropdown(frame, -18, -346)
 
 	CreateLabel(frame, "Icon size", 14, -386)
 	frame.suggestionIconSizeSlider = CreateRangeSlider(frame, "suggestionIconSize", -18, -388, 142, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, "px")
 
-	CreateLabel(frame, "Disable suggestions for upper trinket", 14, -430)
-	frame.disableUpperTrinketSuggestionsCheck = CreateSettingCheckbox(frame, "disableUpperTrinketSuggestions", -18, -424)
+	CreateLabel(frame, "Available sound", 14, -430)
+	frame.suggestionAvailableSoundDropdown = CreateSuggestionSoundDropdown(frame, -18, -424)
 
-	CreateLabel(frame, "Disable suggestions for lower trinket", 14, -456)
-	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(frame, "disableLowerTrinketSuggestions", -18, -450)
+	CreateLabel(frame, "Disable suggestions for upper trinket", 14, -476)
+	frame.disableUpperTrinketSuggestionsCheck = CreateSettingCheckbox(frame, "disableUpperTrinketSuggestions", -18, -470)
+
+	CreateLabel(frame, "Disable suggestions for lower trinket", 14, -502)
+	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(frame, "disableLowerTrinketSuggestions", -18, -496)
 
 	frame:SetScript("OnShow", function(self)
 		RefreshModalValues(self)

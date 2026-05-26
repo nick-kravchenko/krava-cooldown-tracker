@@ -39,6 +39,7 @@ local function GetConfig()
 		disableLowerTrinketSuggestions = true,
 		suggestionPosition = "below",
 		suggestionIconSize = 18,
+		suggestionAvailableSound = "none",
 	}
 end
 
