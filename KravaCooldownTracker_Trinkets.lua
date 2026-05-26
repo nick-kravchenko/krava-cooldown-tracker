@@ -15,7 +15,7 @@ KravaCooldownTracker_TrinketCfg = {
 	[28830] = { kind = "proc",  buffSpellIds = { 34775 }, icd = 20 },
 
 	-- 21670 Badge of the Swarmguard (AQ40)
-	[21670] = { kind = "active", buffSpellIds = { 26481 } },
+	[21670] = { kind = "active", buffSpellIds = { 26480 } },
 
 	-- 29383 Bloodlust Brooch (on-use AP)
 	[29383] = { kind = "active", buffSpellIds = { 35166 } },
@@ -51,6 +51,9 @@ KravaCooldownTracker_TrinketCfg = {
 
 	-- 19406 Drake Fang Talisman (passive stats)
 	[19406] = { kind = "passive" },
+
+	-- 30627 Tsunami Talisman (proc)
+	[30627] = { kind = "proc", buffSpellIds = { 42084 }, icd = 45 },
 
 
 	-- =========================
@@ -116,6 +119,12 @@ KravaCooldownTracker_TrinketCfg = {
 	-- Verified spell: 23688 "Aura of the Blue Dragon"
 	[19288] = { kind = "proc", buffSpellIds = { 23688 } },
 
+	-- 30626 Sextant of Unstable Currents (proc spd)
+	[30626] = { kind = "proc", buffSpellIds = { 38348 }, icd = 45 },
+
+	-- 30720 Serpent-Coil Braid
+	[30720] = { kind = "passive", buffSpellIds = { 37445 } },
+
 
 	-- =========================
 	-- Healer
@@ -147,6 +156,9 @@ KravaCooldownTracker_TrinketCfg = {
 
 	-- 28590 Ribbon of Sacrifice (use)
 	[28590] = { kind = "active", buffSpellIds = { 38332 } },
+
+	-- 30665 Earring of Soulful Meditation (use)
+	[30665] = { kind = "active", buffSpellIds = { 40402 } },
 
 
 	-- =========================

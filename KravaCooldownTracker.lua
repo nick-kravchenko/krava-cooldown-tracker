@@ -34,6 +34,9 @@ local function GetConfig()
 		fontFace = STANDARD_TEXT_FONT,
 		fontSize = 14,
 		locked = true,
+		disableTrinketUsageOnClick = true,
+		notificationPosition = "below",
+		notificationIconSize = 18,
 	}
 end
 
@@ -132,9 +135,9 @@ local function CreateDragHandle(parent, side)
 	handle.bg = handle:CreateTexture(nil, "ARTWORK")
 	handle.bg:SetAllPoints(handle)
 	if handle.bg.SetColorTexture then
-		handle.bg:SetColorTexture(0.15, 0.15, 0.15, 0.55)
+		handle.bg:SetColorTexture(0.38, 0.45, 0.42, 1)
 	else
-		handle.bg:SetTexture(0.15, 0.15, 0.15, 0.55)
+		handle.bg:SetTexture(0.38, 0.45, 0.42, 1)
 	end
 
 	handle.grip = handle:CreateTexture(nil, "OVERLAY")
@@ -145,6 +148,7 @@ local function CreateDragHandle(parent, side)
 	else
 		handle.grip:SetTexture(0.85, 0.85, 0.85, 0.85)
 	end
+	handle.grip:Hide()
 
 	handle:SetScript("OnDragStart", function()
 		local cfg = GetConfig()
@@ -161,7 +165,10 @@ local function CreateDragHandle(parent, side)
 	function handle:ApplyDisplayConfig()
 		local iconSize = GetIconSize()
 		self:SetSize(HANDLE_WIDTH, iconSize)
-		self.grip:SetSize(2, math.max(8, iconSize - 8))
+		if self.grip then
+			self.grip:SetSize(2, math.max(8, iconSize - 8))
+			self.grip:Hide()
+		end
 	end
 
 	return handle
@@ -170,6 +177,18 @@ end
 -- -------------------------------
 -- UI: slot icon buttons
 -- -------------------------------
+local function ApplyTrinketClickConfig(btn, slotId, cfg)
+	if not btn or H.InCombat() then return end
+
+	if cfg and cfg.disableTrinketUsageOnClick then
+		btn:SetAttribute("type", nil)
+		btn:SetAttribute("slot", nil)
+	else
+		btn:SetAttribute("type", "item")
+		btn:SetAttribute("slot", slotId)
+	end
+end
+
 local function CreateSlotIcon(slotId, parent, xOffset)
 	local cfg = GetConfig()
 	local iconSize = cfg.mainIconSize or ICON_SIZE
@@ -180,10 +199,9 @@ local function CreateSlotIcon(slotId, parent, xOffset)
 	btn:EnableMouse(true)
 
 	btn:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
-	btn:SetAttribute("type", "item")
-	btn:SetAttribute("slot", slotId)
 	btn:SetAttribute("type2", "macro")
 	btn:SetAttribute("macrotext2", "")
+	ApplyTrinketClickConfig(btn, slotId, cfg)
 
 	btn.icon = btn:CreateTexture(nil, "ARTWORK")
 	btn.icon:SetAllPoints(btn)
@@ -210,7 +228,7 @@ local function CreateSlotIcon(slotId, parent, xOffset)
 
 	btn.timeText = btn:CreateFontString(nil, "OVERLAY")
 	btn.timeText:SetFont(cfg.fontFace or STANDARD_TEXT_FONT, cfg.fontSize or 14, "OUTLINE")
-	btn.timeText:SetPoint("CENTER", btn, "CENTER", 0, -1)
+	btn.timeText:SetPoint("CENTER", btn, "CENTER", 0, 1)
 	btn.timeText:SetText("")
 	btn.timeText:SetDrawLayer("ARTWORK")
 
@@ -268,6 +286,7 @@ local function CreateSlotIcon(slotId, parent, xOffset)
 		local queueSize = math.max(1, newIconSize * (newCfg.queueIconPercent or 25) / 100)
 		self.queuedIcon:SetSize(queueSize, queueSize)
 		self.timeText:SetFont(newCfg.fontFace or STANDARD_TEXT_FONT, newCfg.fontSize or 14, "OUTLINE")
+		ApplyTrinketClickConfig(self, slotId, newCfg)
 	end
 
 	btn:UpdateIcon()
@@ -294,6 +313,9 @@ local function RefreshTrackerDisplay()
 
 	if T.RefreshDropdowns then
 		T.RefreshDropdowns()
+	end
+	if T.RefreshNotifications then
+		T.RefreshNotifications()
 	end
 
 	if leftDragHandle and leftDragHandle.ApplyDisplayConfig then
@@ -322,6 +344,9 @@ local function OnUpdate(_, elapsed)
 			if T.slotIcon[slotId].UpdateQueuedIcon then
 				T.slotIcon[slotId]:UpdateQueuedIcon()
 			end
+			if T.UpdateNotification then
+				T.UpdateNotification(slotId)
+			end
 		end
 	end
 end
@@ -349,6 +374,10 @@ loader:SetScript("OnEvent", function(_, event, ...)
 		local cont = CreateContainer()
 		CreateSlotIcon(13, cont, 0)
 		CreateSlotIcon(14, cont, GetIconSize() + GAP_BETWEEN)
+		if T.CreateNotificationFrame then
+			T.CreateNotificationFrame(13, T.slotIcon[13])
+			T.CreateNotificationFrame(14, T.slotIcon[14])
+		end
 		leftDragHandle = CreateDragHandle(cont, "Left")
 		rightDragHandle = CreateDragHandle(cont, "Right")
 		RefreshDragHandles(GetConfig())
@@ -361,6 +390,9 @@ loader:SetScript("OnEvent", function(_, event, ...)
 
 	if event == "PLAYER_EQUIPMENT_CHANGED" then
 		T.OnEquipmentChanged(...)
+		if T.UpdateNotification then
+			T.UpdateNotification((...))
+		end
 		return
 	end
 
@@ -369,12 +401,19 @@ loader:SetScript("OnEvent", function(_, event, ...)
 			if T.dropdown[slotId] and T.dropdown[slotId]:IsShown() then
 				T.UpdateDropdown(slotId)
 			end
+			if T.UpdateNotification then
+				T.UpdateNotification(slotId)
+			end
 		end
 		return
 	end
 
 	if event == "PLAYER_REGEN_ENABLED" then
+		RefreshTrackerDisplay()
 		T.OnCombatEnded(containerFrame)
+		if T.RefreshNotifications then
+			T.RefreshNotifications()
+		end
 		return
 	end
 

@@ -24,7 +24,7 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Applies a synthetic 30 second equip lockout timer after equipping configured active/proc trinkets or unknown trinkets without a detectable item cooldown.
 - Shows a small queued-item overlay when a combat-locked swap or unequip is waiting.
 - Saves the trinket frame position and display settings in `KravaCooldownTrackerDB`.
-- Opens a compact immediate-apply config modal with `/kct`.
+- Opens a compact immediate-apply config modal with `/kct`, including a default-on option to prevent main-icon clicks from using equipped trinkets.
 
 ## Controls
 
@@ -32,6 +32,7 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Left-click a dropdown trinket: equip it into the hovered slot, or queue it if combat prevents equipping.
 - Left-click the empty dropdown entry: unequip the hovered slot, or queue the unequip if combat prevents it.
 - Left-click the main trinket icon: retry the queued item for that slot when out of combat.
+- By default, main trinket icon clicks do not activate the equipped trinket. Uncheck "Disable trinket usage on click" in `/kct` to allow click-to-use on the main icons.
 - Type `/kct`: toggle the compact config modal.
 - Unlock the tracker in `/kct`: show left and right drag handles beside the trinkets.
 - Drag either unlocked handle: move the two-icon tracker frame.
@@ -104,11 +105,12 @@ KravaCooldownTrackerDB.config = {
   fontFace = "Fonts\\FRIZQT__.TTF",
   fontSize = 14,
   locked = true,
+  disableTrinketUsageOnClick = true,
 }
 ```
 
 Right-clicking a main trinket icon clears this saved position and restores the default placement.
-New users are locked by default. Unlocking in `/kct` shows minimal drag handles on the left and right of the trinket pair.
+New users are locked by default, and main-icon trinket usage is disabled by default. Unlocking in `/kct` shows minimal drag handles on the left and right of the trinket pair.
 
 ## Trinket Metadata
 
