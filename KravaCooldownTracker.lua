@@ -237,8 +237,12 @@ local function CreateSlotIcon(slotId, parent, xOffset)
 
 	btn:HookScript("OnClick", function(self, button)
 		if button == "RightButton" then
-			KravaCooldownTrackerDB.pos = nil
-			RestoreContainerPosition(parent)
+			if H.InCombat() then return end
+			if C and C.Set then
+				local cfg = GetConfig()
+				C.Set("locked", not cfg.locked)
+				C.RefreshChanged()
+			end
 			return
 		end
 
@@ -298,8 +302,31 @@ local function CreateSlotIcon(slotId, parent, xOffset)
 	return btn
 end
 
+local function IsTrinketsEnabled()
+	if C and C.IsFeatureEnabled then
+		return C.IsFeatureEnabled("trinkets")
+	end
+	return true
+end
+
 local function RefreshTrackerDisplay()
 	local cfg = ApplyModuleDisplayConfig()
+	local enabled = IsTrinketsEnabled()
+	if T.SetFeatureEnabled then T.SetFeatureEnabled(enabled) end
+
+	if not enabled then
+		if containerFrame then containerFrame:Hide() end
+		SetHandleShown(leftDragHandle, false)
+		SetHandleShown(rightDragHandle, false)
+		for _, slotId in ipairs(T.TRINKET_SLOTS) do
+			if T.suggestion[slotId] then T.suggestion[slotId]:Hide() end
+			if T.dropdown[slotId] then T.dropdown[slotId]:Hide() end
+		end
+		return
+	end
+
+	if containerFrame then containerFrame:Show() end
+
 	local iconSize = cfg.mainIconSize or ICON_SIZE
 
 	if containerFrame then
@@ -337,6 +364,7 @@ KravaCooldownTracker_RefreshDisplay = RefreshTrackerDisplay
 -- -------------------------------
 local elapsedAcc = 0
 local function OnUpdate(_, elapsed)
+	if not IsTrinketsEnabled() then return end
 	elapsedAcc = elapsedAcc + elapsed
 	if elapsedAcc < 0.05 then return end
 	elapsedAcc = 0
@@ -386,6 +414,7 @@ loader:SetScript("OnEvent", function(_, event, ...)
 		RefreshDragHandles(GetConfig())
 
 		T.InitSlotState()
+		RefreshTrackerDisplay()
 
 		cont:SetScript("OnUpdate", OnUpdate)
 		return

@@ -41,6 +41,14 @@ T.slotIcon = {}   -- slotId -> button
 T.hideToken = {}  -- slotId -> int
 T.suggestion = {} -- slotId -> frame
 
+-- Feature gate: when the trinkets feature is disabled the display is hidden and
+-- suggestion/dropdown updates must be no-ops even if events still fire.
+T.featureEnabled = true
+
+function T.SetFeatureEnabled(enabled)
+	T.featureEnabled = enabled and true or false
+end
+
 function T.SetDisplayConfig(cfg)
 	if not cfg then return end
 	T.ICON_SIZE = cfg.mainIconSize or T.ICON_SIZE
@@ -390,6 +398,10 @@ local function ConfigureSuggestionButton(slotId, index, item)
 end
 
 function T.UpdateSuggestion(slotId)
+	if not T.featureEnabled then
+		if T.suggestion[slotId] then T.suggestion[slotId]:Hide() end
+		return
+	end
 	local owner = T.slotIcon[slotId]
 	local f = T.suggestion[slotId]
 	if not owner then return end
@@ -758,6 +770,7 @@ function T.UpdateDropdown(slotId)
 end
 
 function T.ShowDropdown(slotId, owner)
+	if not T.featureEnabled then return end
 	if not T.dropdown[slotId] then CreateDropdownFrame(slotId) end
 	CancelHide(slotId)
 

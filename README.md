@@ -24,7 +24,10 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Applies a synthetic 30 second equip lockout timer after equipping configured active/proc trinkets or unknown trinkets without a detectable item cooldown.
 - Shows a small queued-item overlay when a combat-locked swap or unequip is waiting.
 - Saves the trinket frame position and display settings in `KravaCooldownTrackerDB`.
-- Opens a compact immediate-apply config modal with `/kct`, including a default-on option to prevent main-icon clicks from using equipped trinkets and a selectable suggestion-available sound.
+- Opens a tabbed immediate-apply config modal with `/kct`: a **General** tab (font family, lock, and a per-feature enable/disable list) and one tab per enabled feature (currently **Trinkets**).
+- Enable or disable a feature from the General tab. Disabling a feature hides both its config tab and its entire in-world display; re-enabling restores them without `/reload`.
+- Configures per-feature icon sizes, font size, suggestion options, and a selectable suggestion-available sound inside the feature's own tab, plus a default-on option to prevent main-icon clicks from using equipped trinkets.
+- The chosen font family applies to the addon's in-world text (trinket tracker, suggestions, dropdown). The config modal itself always uses Arial.
 
 ## Controls
 
@@ -33,10 +36,10 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Left-click the empty dropdown entry: unequip the hovered slot, or queue the unequip if combat prevents it.
 - Left-click the main trinket icon: retry the queued item for that slot when out of combat.
 - By default, main trinket icon clicks do not activate the equipped trinket. Uncheck "Disable trinket usage on click" in `/kct` to allow click-to-use on the main icons.
-- Type `/kct`: toggle the compact config modal.
-- Unlock the tracker in `/kct`: show left and right drag handles beside the trinkets.
+- Type `/kct`: toggle the tabbed config modal.
+- Unlock the tracker in `/kct` (General tab) or by right-clicking a main trinket icon: show left and right drag handles beside the trinkets.
 - Drag either unlocked handle: move the two-icon tracker frame.
-- Right-click either main trinket icon: reset the frame position to the default center position.
+- Right-click either main trinket icon: toggle the locked/unlocked state (no effect in combat).
 
 ## Visual States
 
@@ -109,11 +112,14 @@ KravaCooldownTrackerDB.config = {
   disableUpperTrinketSuggestions = true,
   disableLowerTrinketSuggestions = true,
   suggestionAvailableSound = "none",
+  features = {
+    trinkets = true,
+  },
 }
 ```
 
-Right-clicking a main trinket icon clears this saved position and restores the default placement.
-New users are locked by default, main-icon trinket usage is disabled by default, and suggestions are disabled for both trinket slots. Unlocking in `/kct` shows minimal drag handles on the left and right of the trinket pair.
+Right-clicking a main trinket icon toggles the locked/unlocked state (out of combat); it no longer resets the saved position. To reposition, unlock (via the General tab or right-click) and drag a handle.
+New users are locked by default, all features are enabled by default, main-icon trinket usage is disabled by default, and suggestions are disabled for both trinket slots. Disabling a feature in the General tab hides its tab and its in-world display; missing or pre-upgrade saved variables default every feature to enabled.
 
 ## Trinket Metadata
 

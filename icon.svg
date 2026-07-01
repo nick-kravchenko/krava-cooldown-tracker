@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26302b"/>
+      <stop offset="1" stop-color="#0c0f0d"/>
+    </linearGradient>
+    <linearGradient id="gem" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7fe9c3"/>
+      <stop offset="0.55" stop-color="#2fbf8f"/>
+      <stop offset="1" stop-color="#147a5a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.42" r="0.6">
+      <stop offset="0" stop-color="#ffe9a8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffe9a8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- panel -->
+  <rect x="8" y="8" width="240" height="240" rx="44" fill="url(#bg)" stroke="#6f6f6f" stroke-width="4"/>
+
+  <!-- soft glow behind gem -->
+  <circle cx="128" cy="122" r="86" fill="url(#glow)"/>
+
+  <!-- cooldown ring track -->
+  <circle cx="128" cy="128" r="82" fill="none" stroke="#000000" stroke-opacity="0.35" stroke-width="16"/>
+  <!-- cooldown sweep (gold arc, ~70%) -->
+  <path d="M 128 46 A 82 82 0 1 1 46.6 138.9"
+        fill="none" stroke="#ffcf33" stroke-width="16" stroke-linecap="round"/>
+
+  <!-- trinket gem (diamond) -->
+  <g>
+    <polygon points="128,64 182,128 128,204 74,128"
+             fill="url(#gem)" stroke="#eafff6" stroke-width="4" stroke-linejoin="round"/>
+    <!-- facet highlights -->
+    <polygon points="128,64 182,128 128,128" fill="#ffffff" fill-opacity="0.22"/>
+    <polygon points="128,64 74,128 128,128" fill="#ffffff" fill-opacity="0.10"/>
+    <polygon points="128,204 182,128 128,128" fill="#000000" fill-opacity="0.18"/>
+  </g>
+
+  <!-- KCT wordmark -->
+  <text x="128" y="238" text-anchor="middle" font-family="Arial, sans-serif"
+        font-size="26" font-weight="bold" fill="#ffcf33" letter-spacing="3">KCT</text>
+</svg>

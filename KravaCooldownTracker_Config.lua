@@ -217,6 +217,11 @@ function C.Normalize()
 		cfg.locked = DEFAULT_LOCKED
 	end
 
+	cfg.features = cfg.features or {}
+	if type(cfg.features.trinkets) ~= "boolean" then
+		cfg.features.trinkets = true
+	end
+
 	if type(cfg.disableTrinketUsageOnClick) ~= "boolean" then
 		cfg.disableTrinketUsageOnClick = DEFAULT_DISABLE_TRINKET_USAGE_ON_CLICK
 	end
@@ -241,6 +246,50 @@ function C.Set(key, value)
 	cfg[key] = value
 	C.Normalize()
 	return cfg[key]
+end
+
+function C.IsFeatureEnabled(name)
+	local cfg = C.Get()
+	return cfg.features and cfg.features[name] ~= false or false
+end
+
+function C.SetFeatureEnabled(name, value)
+	local cfg = EnsureDB()
+	cfg.features = cfg.features or {}
+	cfg.features[name] = value and true or false
+	C.Normalize()
+	C.RefreshChanged()
+	return cfg.features[name]
+end
+
+-- The config modal's own text always uses a fixed Arial face, independent of
+-- the feature font chosen in the General tab (that font applies only to feature
+-- UI such as the trinket menu, via T.SetDisplayConfig). Each entry stores the
+-- FontString plus its captured point size/flags so only the face is replaced.
+local MODAL_FONT = "Fonts\\ARIALN.TTF"
+
+C.fontStrings = C.fontStrings or {}
+
+function C.RegisterFontString(fs, size, flags)
+	if not fs or not fs.SetFont then return end
+	if not size then
+		local _, capturedSize, capturedFlags = fs:GetFont()
+		size = capturedSize
+		flags = flags or capturedFlags
+	end
+	C.fontStrings[#C.fontStrings + 1] = { fs = fs, size = size, flags = flags }
+	if size then
+		fs:SetFont(MODAL_FONT, size, flags)
+	end
+	return fs
+end
+
+function C.ApplyModalFont()
+	for _, entry in ipairs(C.fontStrings) do
+		if entry.fs and entry.fs.SetFont and entry.size then
+			entry.fs:SetFont(MODAL_FONT, entry.size, entry.flags)
+		end
+	end
 end
 
 function C.SetRefreshCallback(callback)
@@ -285,6 +334,7 @@ local function CreateLabel(parent, text, x, y)
 	label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
 	label:SetText(text)
 	label:SetTextColor(0.85, 0.85, 0.85, 1)
+	C.RegisterFontString(label)
 	return label
 end
 
@@ -292,6 +342,7 @@ local function CreateSectionHeader(parent, text, x, y)
 	local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
 	label:SetText(text)
+	C.RegisterFontString(label)
 	return label
 end
 
@@ -310,9 +361,9 @@ local function CreateRangeSlider(parent, key, x, y, width, minValue, maxValue, s
 	slider.Low = slider.Low or _G[name .. "Low"]
 	slider.High = slider.High or _G[name .. "High"]
 
-	if slider.Text then slider.Text:SetText("") end
-	if slider.Low then slider.Low:SetText(tostring(minValue)) end
-	if slider.High then slider.High:SetText(tostring(maxValue)) end
+	if slider.Text then slider.Text:SetText("") C.RegisterFontString(slider.Text) end
+	if slider.Low then slider.Low:SetText(tostring(minValue)) C.RegisterFontString(slider.Low) end
+	if slider.High then slider.High:SetText(tostring(maxValue)) C.RegisterFontString(slider.High) end
 
 	slider.track = slider:CreateTexture(nil, "BACKGROUND")
 	slider.track:SetPoint("LEFT", slider, "LEFT", 4, 0)
@@ -323,6 +374,7 @@ local function CreateRangeSlider(parent, key, x, y, width, minValue, maxValue, s
 	slider.valueTooltip = slider:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	slider.valueTooltip:SetPoint("BOTTOM", slider, "TOP", 0, 5)
 	slider.valueTooltip:SetTextColor(1, 0.82, 0, 1)
+	C.RegisterFontString(slider.valueTooltip)
 
 	slider:SetScript("OnValueChanged", function(self, value)
 		value = ClampNumber(value, minValue, maxValue, minValue)
@@ -373,6 +425,16 @@ local function RefreshModalValues(frame)
 	if frame.suggestionAvailableSoundDropdown and frame.suggestionAvailableSoundDropdown.Refresh then
 		frame.suggestionAvailableSoundDropdown:Refresh(cfg)
 	end
+
+	if frame.trinketsFeatureCheck then
+		frame.trinketsFeatureCheck:SetChecked(C.IsFeatureEnabled("trinkets"))
+	end
+
+	if frame.UpdateTabVisibility then
+		frame.UpdateTabVisibility()
+	end
+
+	C.ApplyModalFont()
 end
 
 local StyleDropdownButton
@@ -388,10 +450,12 @@ local function CreateFontDropdown(parent, x, y)
 	dropdown.text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
 	dropdown.text:SetPoint("RIGHT", dropdown, "RIGHT", -26, 0)
 	dropdown.text:SetJustifyH("LEFT")
+	C.RegisterFontString(dropdown.text)
 
 	dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	dropdown.arrow:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
 	dropdown.arrow:SetText("v")
+	C.RegisterFontString(dropdown.arrow)
 
 	local menu = CreateFrame("Frame", "KravaCooldownTrackerFontMenu", dropdown, backdropTemplate)
 	menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
@@ -429,6 +493,7 @@ local function CreateFontDropdown(parent, x, y)
 				row.text:SetPoint("LEFT", row, "LEFT", 7, 0)
 				row.text:SetPoint("RIGHT", row, "RIGHT", -7, 0)
 				row.text:SetJustifyH("LEFT")
+				C.RegisterFontString(row.text)
 				row:SetScript("OnClick", function(self)
 					if self.option then
 						SelectFont(self.option.path)
@@ -523,10 +588,12 @@ local function CreateSuggestionPositionDropdown(parent, x, y)
 	dropdown.text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
 	dropdown.text:SetPoint("RIGHT", dropdown, "RIGHT", -24, 0)
 	dropdown.text:SetJustifyH("LEFT")
+	C.RegisterFontString(dropdown.text)
 
 	dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	dropdown.arrow:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
 	dropdown.arrow:SetText("v")
+	C.RegisterFontString(dropdown.arrow)
 
 	local options = {
 		{ label = "Below", value = "below" },
@@ -559,6 +626,7 @@ local function CreateSuggestionPositionDropdown(parent, x, y)
 		row.text:SetPoint("RIGHT", row, "RIGHT", -7, 0)
 		row.text:SetJustifyH("LEFT")
 		row.text:SetText(option.label)
+		C.RegisterFontString(row.text)
 		row:SetScript("OnClick", function(self)
 			SelectPosition(self.option.value)
 		end)
@@ -615,10 +683,12 @@ local function CreateSuggestionSoundDropdown(parent, x, y)
 	dropdown.text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
 	dropdown.text:SetPoint("RIGHT", dropdown, "RIGHT", -26, 0)
 	dropdown.text:SetJustifyH("LEFT")
+	C.RegisterFontString(dropdown.text)
 
 	dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	dropdown.arrow:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
 	dropdown.arrow:SetText("v")
+	C.RegisterFontString(dropdown.arrow)
 
 	local menu = CreateFrame("Frame", "KravaCooldownTrackerSuggestionSoundMenu", dropdown, backdropTemplate)
 	menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
@@ -663,6 +733,7 @@ local function CreateSuggestionSoundDropdown(parent, x, y)
 				row.text:SetPoint("LEFT", row.select, "LEFT", 5, 0)
 				row.text:SetPoint("RIGHT", row.select, "RIGHT", -4, 0)
 				row.text:SetJustifyH("LEFT")
+				C.RegisterFontString(row.text)
 
 				row.preview = CreateFrame("Button", nil, row)
 				row.preview:SetSize(20, 20)
@@ -774,13 +845,49 @@ local function CreateSuggestionSoundDropdown(parent, x, y)
 	return dropdown
 end
 
+local function CreateTabButton(frame, text, x)
+	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
+	local button = CreateFrame("Button", nil, frame, backdropTemplate)
+	button:SetSize(84, 22)
+	button:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -34)
+	StyleDropdownButton(button)
+
+	button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	button.text:SetPoint("CENTER", button, "CENTER", 0, 0)
+	button.text:SetText(text)
+	C.RegisterFontString(button.text)
+
+	function button:SetActive(active)
+		if active then
+			self.text:SetTextColor(1, 0.82, 0, 1)
+			if self.SetBackdropBorderColor then self:SetBackdropBorderColor(1, 0.82, 0, 0.9) end
+		else
+			self.text:SetTextColor(1, 1, 1, 1)
+			if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0.36, 0.36, 0.36, 0.9) end
+		end
+	end
+
+	return button
+end
+
+local function CreateFeatureCheckbox(parent, featureName, x, y, onToggle)
+	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+	check:SetSize(24, 24)
+	check:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
+	check:SetScript("OnClick", function(self)
+		C.SetFeatureEnabled(featureName, self:GetChecked() and true or false)
+		if onToggle then onToggle() end
+	end)
+	return check
+end
+
 function C.CreateModal()
 	if C.modal then return C.modal end
 	if not UIParent then return nil end
 
 	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
 	local frame = CreateFrame("Frame", "KravaCooldownTrackerConfigModal", UIParent, backdropTemplate)
-	frame:SetSize(320, 524)
+	frame:SetSize(320, 440)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetFrameStrata("DIALOG")
 	frame:EnableMouse(true)
@@ -793,51 +900,115 @@ function C.CreateModal()
 	local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	title:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -10)
 	title:SetText("KCT")
+	C.RegisterFontString(title)
 
 	local close = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
 	close:SetSize(54, 20)
 	close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -8)
 	close:SetText("Close")
 	close:SetScript("OnClick", function() frame:Hide() end)
+	if close.GetFontString and close:GetFontString() then
+		C.RegisterFontString(close:GetFontString())
+	end
 
-	CreateSectionHeader(frame, "General", 14, -42)
+	-- Tabs
+	frame.generalTab = CreateTabButton(frame, "General", 10)
+	frame.trinketsTab = CreateTabButton(frame, "Trinkets", 98)
 
-	CreateLabel(frame, "Locked", 14, -64)
-	frame.lockedCheck = CreateSettingCheckbox(frame, "locked", -18, -58)
+	-- Panes (only one shown at a time)
+	frame.generalPane = CreateFrame("Frame", nil, frame)
+	frame.generalPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
+	frame.generalPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
-	CreateLabel(frame, "Font", 14, -90)
-	frame.fontDropdown = CreateFontDropdown(frame, -18, -84)
+	frame.trinketsPane = CreateFrame("Frame", nil, frame)
+	frame.trinketsPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
+	frame.trinketsPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
-	CreateLabel(frame, "Font size", 14, -132)
-	frame.fontSizeSlider = CreateRangeSlider(frame, "fontSize", -18, -134, 142, MIN_FONT_SIZE, MAX_FONT_SIZE, "px")
+	local function SetActivePane(name)
+		if name == "trinkets" and C.IsFeatureEnabled("trinkets") then
+			frame.activePane = "trinkets"
+		else
+			frame.activePane = "general"
+		end
+		if frame.activePane == "trinkets" then
+			frame.generalPane:Hide()
+			frame.trinketsPane:Show()
+			frame.generalTab:SetActive(false)
+			frame.trinketsTab:SetActive(true)
+		else
+			frame.trinketsPane:Hide()
+			frame.generalPane:Show()
+			frame.generalTab:SetActive(true)
+			frame.trinketsTab:SetActive(false)
+		end
+	end
+	frame.SetActivePane = SetActivePane
 
-	CreateSectionHeader(frame, "Main Icon", 14, -176)
+	frame.generalTab:SetScript("OnClick", function() SetActivePane("general") end)
+	frame.trinketsTab:SetScript("OnClick", function() SetActivePane("trinkets") end)
 
-	CreateLabel(frame, "Icon size", 14, -204)
-	frame.mainIconSizeSlider = CreateRangeSlider(frame, "mainIconSize", -18, -206, 142, MIN_MAIN_ICON_SIZE, MAX_MAIN_ICON_SIZE, "px")
+	local function UpdateTabVisibility()
+		if C.IsFeatureEnabled("trinkets") then
+			frame.trinketsTab:Show()
+		else
+			frame.trinketsTab:Hide()
+			if frame.activePane == "trinkets" then
+				SetActivePane("general")
+			end
+		end
+	end
+	frame.UpdateTabVisibility = UpdateTabVisibility
 
-	CreateLabel(frame, "Queue icon size", 14, -248)
-	frame.queueIconPercentSlider = CreateRangeSlider(frame, "queueIconPercent", -18, -250, 142, MIN_QUEUE_ICON_PERCENT, MAX_QUEUE_ICON_PERCENT, "%")
+	-- General pane
+	local gp = frame.generalPane
+	CreateLabel(gp, "Locked", 16, -12)
+	frame.lockedCheck = CreateSettingCheckbox(gp, "locked", -18, -6)
 
-	CreateLabel(frame, "Disable trinket usage on click", 14, -292)
-	frame.disableTrinketUsageCheck = CreateSettingCheckbox(frame, "disableTrinketUsageOnClick", -18, -286)
+	CreateLabel(gp, "Font", 16, -42)
+	frame.fontDropdown = CreateFontDropdown(gp, -18, -36)
 
-	CreateSectionHeader(frame, "Suggestions", 14, -326)
+	CreateSectionHeader(gp, "Features", 16, -78)
+	CreateLabel(gp, "Trinkets", 28, -104)
+	frame.trinketsFeatureCheck = CreateFeatureCheckbox(gp, "trinkets", -18, -98, function()
+		UpdateTabVisibility()
+	end)
 
-	CreateLabel(frame, "Position", 14, -352)
-	frame.suggestionPositionDropdown = CreateSuggestionPositionDropdown(frame, -18, -346)
+	-- Trinkets pane
+	local tp = frame.trinketsPane
+	CreateLabel(tp, "Font size", 16, -12)
+	frame.fontSizeSlider = CreateRangeSlider(tp, "fontSize", -18, -14, 142, MIN_FONT_SIZE, MAX_FONT_SIZE, "px")
 
-	CreateLabel(frame, "Icon size", 14, -386)
-	frame.suggestionIconSizeSlider = CreateRangeSlider(frame, "suggestionIconSize", -18, -388, 142, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, "px")
+	CreateSectionHeader(tp, "Main Icon", 16, -48)
 
-	CreateLabel(frame, "Available sound", 14, -430)
-	frame.suggestionAvailableSoundDropdown = CreateSuggestionSoundDropdown(frame, -18, -424)
+	CreateLabel(tp, "Icon size", 16, -74)
+	frame.mainIconSizeSlider = CreateRangeSlider(tp, "mainIconSize", -18, -76, 142, MIN_MAIN_ICON_SIZE, MAX_MAIN_ICON_SIZE, "px")
 
-	CreateLabel(frame, "Disable suggestions for upper trinket", 14, -476)
-	frame.disableUpperTrinketSuggestionsCheck = CreateSettingCheckbox(frame, "disableUpperTrinketSuggestions", -18, -470)
+	CreateLabel(tp, "Queue icon size", 16, -110)
+	frame.queueIconPercentSlider = CreateRangeSlider(tp, "queueIconPercent", -18, -112, 142, MIN_QUEUE_ICON_PERCENT, MAX_QUEUE_ICON_PERCENT, "%")
 
-	CreateLabel(frame, "Disable suggestions for lower trinket", 14, -502)
-	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(frame, "disableLowerTrinketSuggestions", -18, -496)
+	CreateLabel(tp, "Disable trinket usage on click", 16, -150)
+	frame.disableTrinketUsageCheck = CreateSettingCheckbox(tp, "disableTrinketUsageOnClick", -18, -144)
+
+	CreateSectionHeader(tp, "Suggestions", 16, -184)
+
+	CreateLabel(tp, "Position", 16, -210)
+	frame.suggestionPositionDropdown = CreateSuggestionPositionDropdown(tp, -18, -204)
+
+	CreateLabel(tp, "Icon size", 16, -240)
+	frame.suggestionIconSizeSlider = CreateRangeSlider(tp, "suggestionIconSize", -18, -242, 142, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, "px")
+
+	CreateLabel(tp, "Available sound", 16, -276)
+	frame.suggestionAvailableSoundDropdown = CreateSuggestionSoundDropdown(tp, -18, -270)
+
+	CreateLabel(tp, "Disable suggestions for upper trinket", 16, -316)
+	frame.disableUpperTrinketSuggestionsCheck = CreateSettingCheckbox(tp, "disableUpperTrinketSuggestions", -18, -310)
+
+	CreateLabel(tp, "Disable suggestions for lower trinket", 16, -342)
+	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(tp, "disableLowerTrinketSuggestions", -18, -336)
+
+	SetActivePane("general")
+	UpdateTabVisibility()
+	C.ApplyModalFont()
 
 	frame:SetScript("OnShow", function(self)
 		RefreshModalValues(self)
