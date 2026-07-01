@@ -14,6 +14,11 @@ local DEFAULT_DISABLE_LOWER_TRINKET_SUGGESTIONS = true
 local DEFAULT_SUGGESTION_POSITION = "below"
 local DEFAULT_SUGGESTION_ICON_SIZE = 18
 local DEFAULT_SUGGESTION_AVAILABLE_SOUND = "none"
+local DEFAULT_DEBUFF_ICON_SIZE = 32
+local DEFAULT_DEBUFF_FONT_SIZE = 14
+local DEFAULT_DEBUFF_PER_LINE = 8
+local DEFAULT_DEBUFF_LOCKED = true
+local DEFAULT_DEBUFF_DIRECTION = "horizontal"
 
 local MIN_MAIN_ICON_SIZE = 14
 local MAX_MAIN_ICON_SIZE = 48
@@ -23,8 +28,30 @@ local MIN_FONT_SIZE = 14
 local MAX_FONT_SIZE = 48
 local MIN_SUGGESTION_ICON_SIZE = 14
 local MAX_SUGGESTION_ICON_SIZE = 48
+local MIN_DEBUFF_ICON_SIZE = 14
+local MAX_DEBUFF_ICON_SIZE = 48
+local MIN_DEBUFF_FONT_SIZE = 10
+local MAX_DEBUFF_FONT_SIZE = 32
+local MIN_DEBUFF_PER_LINE = 1
+local MAX_DEBUFF_PER_LINE = 12
 local DROPDOWN_ROW_HEIGHT = 24
 local MAX_DROPDOWN_ROWS = 7
+
+-- Keep in sync with KravaCooldownTracker_DebuffLogic.DEBUFFS key order (Task 2)
+local DEBUFF_KEYS = {
+	"majorArmorReduction",
+	"curseOfRecklessness",
+	"curseOfTheElements",
+	"huntersMark",
+	"scorpidSting",
+	"judgementOfTheCrusader",
+	"judgementOfWisdom",
+	"demoralizingShoutRoar",
+	"faerieFire",
+	"judgementOfLight",
+	"shadowVulnerability",
+	"thunderClap",
+}
 
 local HORN_ICON = "Interface\\Icons\\INV_Misc_Horn_01"
 
@@ -51,6 +78,11 @@ end
 local function NormalizeSuggestionPosition(value)
 	if value == "above" or value == "below" then return value end
 	return DEFAULT_SUGGESTION_POSITION
+end
+
+local function NormalizeDebuffDirection(value)
+	if value == "horizontal" or value == "vertical" then return value end
+	return DEFAULT_DEBUFF_DIRECTION
 end
 
 local function EnsureDB()
@@ -208,6 +240,10 @@ function C.Normalize()
 	cfg.suggestionIconSize = ClampNumber(cfg.suggestionIconSize, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, DEFAULT_SUGGESTION_ICON_SIZE)
 	cfg.suggestionPosition = NormalizeSuggestionPosition(cfg.suggestionPosition)
 	cfg.suggestionAvailableSound = NormalizeSuggestionAvailableSound(cfg.suggestionAvailableSound)
+	cfg.debuffIconSize = ClampNumber(cfg.debuffIconSize, MIN_DEBUFF_ICON_SIZE, MAX_DEBUFF_ICON_SIZE, DEFAULT_DEBUFF_ICON_SIZE)
+	cfg.debuffFontSize = ClampNumber(cfg.debuffFontSize, MIN_DEBUFF_FONT_SIZE, MAX_DEBUFF_FONT_SIZE, DEFAULT_DEBUFF_FONT_SIZE)
+	cfg.debuffPerLine = ClampNumber(cfg.debuffPerLine, MIN_DEBUFF_PER_LINE, MAX_DEBUFF_PER_LINE, DEFAULT_DEBUFF_PER_LINE)
+	cfg.debuffDirection = NormalizeDebuffDirection(cfg.debuffDirection)
 
 	if not IsUsableFontPath(cfg.fontFace) then
 		cfg.fontFace = GetDefaultFont()
@@ -217,9 +253,23 @@ function C.Normalize()
 		cfg.locked = DEFAULT_LOCKED
 	end
 
+	if type(cfg.debuffLocked) ~= "boolean" then
+		cfg.debuffLocked = DEFAULT_DEBUFF_LOCKED
+	end
+
 	cfg.features = cfg.features or {}
 	if type(cfg.features.trinkets) ~= "boolean" then
 		cfg.features.trinkets = true
+	end
+	if type(cfg.features.debuffs) ~= "boolean" then
+		cfg.features.debuffs = true
+	end
+
+	cfg.debuffs = cfg.debuffs or {}
+	for _, key in ipairs(DEBUFF_KEYS) do
+		if type(cfg.debuffs[key]) ~= "boolean" then
+			cfg.debuffs[key] = true
+		end
 	end
 
 	if type(cfg.disableTrinketUsageOnClick) ~= "boolean" then
@@ -428,6 +478,24 @@ local function RefreshModalValues(frame)
 
 	if frame.trinketsFeatureCheck then
 		frame.trinketsFeatureCheck:SetChecked(C.IsFeatureEnabled("trinkets"))
+	end
+
+	if frame.debuffIconSizeSlider then frame.debuffIconSizeSlider:SetValue(cfg.debuffIconSize) end
+	if frame.debuffFontSizeSlider then frame.debuffFontSizeSlider:SetValue(cfg.debuffFontSize) end
+	if frame.debuffPerLineSlider then frame.debuffPerLineSlider:SetValue(cfg.debuffPerLine) end
+
+	if frame.debuffDirectionDropdown and frame.debuffDirectionDropdown.Refresh then
+		frame.debuffDirectionDropdown:Refresh(cfg)
+	end
+
+	if frame.debuffsFeatureCheck then
+		frame.debuffsFeatureCheck:SetChecked(C.IsFeatureEnabled("debuffs"))
+	end
+
+	if frame.debuffToggles then
+		for key, check in pairs(frame.debuffToggles) do
+			check:SetChecked(cfg.debuffs[key] and true or false)
+		end
 	end
 
 	if frame.UpdateTabVisibility then
@@ -639,6 +707,87 @@ local function CreateSuggestionPositionDropdown(parent, x, y)
 		self.text:SetText(label)
 		for _, row in ipairs(menu.rows) do
 			if row.option.value == cfg.suggestionPosition then
+				row.text:SetTextColor(1, 0.82, 0, 1)
+			else
+				row.text:SetTextColor(1, 1, 1, 1)
+			end
+		end
+	end
+
+	dropdown:SetScript("OnClick", function()
+		if menu:IsShown() then
+			menu:Hide()
+		else
+			dropdown:Refresh(C.Get())
+			menu:Show()
+		end
+	end)
+
+	return dropdown
+end
+
+local function CreateDebuffDirectionDropdown(parent, x, y)
+	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
+	local dropdown = CreateFrame("Button", "KravaCooldownTrackerDebuffDirectionDropdown", parent, backdropTemplate)
+	dropdown:SetSize(84, 22)
+	dropdown:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
+	StyleDropdownButton(dropdown)
+
+	dropdown.text = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
+	dropdown.text:SetPoint("RIGHT", dropdown, "RIGHT", -24, 0)
+	dropdown.text:SetJustifyH("LEFT")
+	C.RegisterFontString(dropdown.text)
+
+	dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.arrow:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
+	dropdown.arrow:SetText("v")
+	C.RegisterFontString(dropdown.arrow)
+
+	local options = {
+		{ label = "Horizontal", value = "horizontal" },
+		{ label = "Vertical", value = "vertical" },
+	}
+
+	local menu = CreateFrame("Frame", "KravaCooldownTrackerDebuffDirectionMenu", dropdown, backdropTemplate)
+	menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+	menu:SetSize(84, (#options * DROPDOWN_ROW_HEIGHT) + 4)
+	menu:SetFrameStrata("DIALOG")
+	menu:SetFrameLevel(dropdown:GetFrameLevel() + 10)
+	menu.rows = {}
+	StylePanel(menu)
+	menu:Hide()
+	dropdown.menu = menu
+
+	local function SelectDirection(value)
+		SetAndRefresh("debuffDirection", value)
+		dropdown:Refresh(C.Get())
+		menu:Hide()
+	end
+
+	for index, option in ipairs(options) do
+		local row = CreateFrame("Button", nil, menu)
+		row:SetSize(80, DROPDOWN_ROW_HEIGHT)
+		row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -2 - ((index - 1) * DROPDOWN_ROW_HEIGHT))
+		row.option = option
+		row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		row.text:SetPoint("LEFT", row, "LEFT", 7, 0)
+		row.text:SetPoint("RIGHT", row, "RIGHT", -7, 0)
+		row.text:SetJustifyH("LEFT")
+		row.text:SetText(option.label)
+		C.RegisterFontString(row.text)
+		row:SetScript("OnClick", function(self)
+			SelectDirection(self.option.value)
+		end)
+		menu.rows[index] = row
+	end
+
+	function dropdown:Refresh(cfg)
+		cfg = cfg or C.Get()
+		local label = cfg.debuffDirection == "vertical" and "Vertical" or "Horizontal"
+		self.text:SetText(label)
+		for _, row in ipairs(menu.rows) do
+			if row.option.value == cfg.debuffDirection then
 				row.text:SetTextColor(1, 0.82, 0, 1)
 			else
 				row.text:SetTextColor(1, 1, 1, 1)
@@ -881,6 +1030,21 @@ local function CreateFeatureCheckbox(parent, featureName, x, y, onToggle)
 	return check
 end
 
+-- Per-debuff toggle writes a nested cfg.debuffs[key] (not a flat cfg[key]), so it
+-- cannot reuse CreateSettingCheckbox/CreateFeatureCheckbox.
+local function CreateDebuffToggleCheckbox(parent, debuffKey, x, y)
+	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+	check:SetSize(24, 24)
+	check:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+	check:SetScript("OnClick", function(self)
+		local cfg = C.Get()
+		cfg.debuffs[debuffKey] = self:GetChecked() and true or false
+		C.Set("debuffs", cfg.debuffs)
+		C.RefreshChanged()
+	end)
+	return check
+end
+
 function C.CreateModal()
 	if C.modal then return C.modal end
 	if not UIParent then return nil end
@@ -914,6 +1078,7 @@ function C.CreateModal()
 	-- Tabs
 	frame.generalTab = CreateTabButton(frame, "General", 10)
 	frame.trinketsTab = CreateTabButton(frame, "Trinkets", 98)
+	frame.debuffsTab = CreateTabButton(frame, "Debuffs", 186)
 
 	-- Panes (only one shown at a time)
 	frame.generalPane = CreateFrame("Frame", nil, frame)
@@ -924,28 +1089,46 @@ function C.CreateModal()
 	frame.trinketsPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
 	frame.trinketsPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
+	frame.debuffsPane = CreateFrame("Frame", nil, frame)
+	frame.debuffsPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
+	frame.debuffsPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+
 	local function SetActivePane(name)
 		if name == "trinkets" and C.IsFeatureEnabled("trinkets") then
 			frame.activePane = "trinkets"
+		elseif name == "debuffs" and C.IsFeatureEnabled("debuffs") then
+			frame.activePane = "debuffs"
 		else
 			frame.activePane = "general"
 		end
 		if frame.activePane == "trinkets" then
 			frame.generalPane:Hide()
+			frame.debuffsPane:Hide()
 			frame.trinketsPane:Show()
 			frame.generalTab:SetActive(false)
 			frame.trinketsTab:SetActive(true)
+			frame.debuffsTab:SetActive(false)
+		elseif frame.activePane == "debuffs" then
+			frame.generalPane:Hide()
+			frame.trinketsPane:Hide()
+			frame.debuffsPane:Show()
+			frame.generalTab:SetActive(false)
+			frame.trinketsTab:SetActive(false)
+			frame.debuffsTab:SetActive(true)
 		else
 			frame.trinketsPane:Hide()
+			frame.debuffsPane:Hide()
 			frame.generalPane:Show()
 			frame.generalTab:SetActive(true)
 			frame.trinketsTab:SetActive(false)
+			frame.debuffsTab:SetActive(false)
 		end
 	end
 	frame.SetActivePane = SetActivePane
 
 	frame.generalTab:SetScript("OnClick", function() SetActivePane("general") end)
 	frame.trinketsTab:SetScript("OnClick", function() SetActivePane("trinkets") end)
+	frame.debuffsTab:SetScript("OnClick", function() SetActivePane("debuffs") end)
 
 	local function UpdateTabVisibility()
 		if C.IsFeatureEnabled("trinkets") then
@@ -953,6 +1136,14 @@ function C.CreateModal()
 		else
 			frame.trinketsTab:Hide()
 			if frame.activePane == "trinkets" then
+				SetActivePane("general")
+			end
+		end
+		if C.IsFeatureEnabled("debuffs") then
+			frame.debuffsTab:Show()
+		else
+			frame.debuffsTab:Hide()
+			if frame.activePane == "debuffs" then
 				SetActivePane("general")
 			end
 		end
@@ -970,6 +1161,10 @@ function C.CreateModal()
 	CreateSectionHeader(gp, "Features", 16, -78)
 	CreateLabel(gp, "Trinkets", 28, -104)
 	frame.trinketsFeatureCheck = CreateFeatureCheckbox(gp, "trinkets", -18, -98, function()
+		UpdateTabVisibility()
+	end)
+	CreateLabel(gp, "Debuffs", 28, -130)
+	frame.debuffsFeatureCheck = CreateFeatureCheckbox(gp, "debuffs", -18, -124, function()
 		UpdateTabVisibility()
 	end)
 
@@ -1005,6 +1200,38 @@ function C.CreateModal()
 
 	CreateLabel(tp, "Disable suggestions for lower trinket", 16, -342)
 	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(tp, "disableLowerTrinketSuggestions", -18, -336)
+
+	-- Debuffs pane
+	local dp = frame.debuffsPane
+	CreateSectionHeader(dp, "Layout", 16, -12)
+
+	CreateLabel(dp, "Icon size", 16, -38)
+	frame.debuffIconSizeSlider = CreateRangeSlider(dp, "debuffIconSize", -18, -40, 142, MIN_DEBUFF_ICON_SIZE, MAX_DEBUFF_ICON_SIZE, "px")
+
+	CreateLabel(dp, "Font size", 16, -68)
+	frame.debuffFontSizeSlider = CreateRangeSlider(dp, "debuffFontSize", -18, -70, 142, MIN_DEBUFF_FONT_SIZE, MAX_DEBUFF_FONT_SIZE, "px")
+
+	CreateLabel(dp, "Per line", 16, -98)
+	frame.debuffPerLineSlider = CreateRangeSlider(dp, "debuffPerLine", -18, -100, 142, MIN_DEBUFF_PER_LINE, MAX_DEBUFF_PER_LINE, "")
+
+	CreateLabel(dp, "Direction", 16, -128)
+	frame.debuffDirectionDropdown = CreateDebuffDirectionDropdown(dp, -18, -122)
+
+	CreateSectionHeader(dp, "Debuffs", 16, -160)
+
+	frame.debuffToggles = frame.debuffToggles or {}
+	local debuffList = KravaCooldownTracker_DebuffLogic and KravaCooldownTracker_DebuffLogic.DEBUFFS
+	if debuffList then
+		for index, entry in ipairs(debuffList) do
+			local column = index <= 6 and 0 or 1
+			local rowInColumn = (index - 1) % 6
+			local cbx = 16 + column * 150
+			local cby = -184 - rowInColumn * 26
+			local check = CreateDebuffToggleCheckbox(dp, entry.key, cbx, cby)
+			CreateLabel(dp, entry.displayName, cbx + 24, cby - 6)
+			frame.debuffToggles[entry.key] = check
+		end
+	end
 
 	SetActivePane("general")
 	UpdateTabVisibility()

@@ -1,6 +1,6 @@
 # KravaCooldownTracker
 
-KravaCooldownTracker is a lightweight World of Warcraft Classic addon for managing trinkets. It shows the two equipped trinket slots as movable icons, lets you swap trinkets from your bags through a hover menu, and displays cooldown, aura, and internal cooldown timing where the addon has metadata for the equipped item.
+KravaCooldownTracker is a lightweight World of Warcraft Classic addon with two independent features: a **Trinkets** tracker that shows the two equipped trinket slots as movable icons, lets you swap trinkets from your bags through a hover menu, and displays cooldown, aura, and internal cooldown timing where the addon has metadata for the equipped item; and a **Debuffs** tracker that shows a fixed grid of important harmful debuffs on your current target, greyed out when absent and lit with a live countdown when active. Each feature has its own movable frame, lock state, and config tab, and can be enabled or disabled independently.
 
 ## Game Version
 
@@ -14,6 +14,8 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 
 ## Features
 
+### Trinkets
+
 - Shows both player trinket slots, inventory slots `13` and `14`.
 - Hover a trinket slot to open a vertical dropdown of trinkets found in bags `0` through `4`.
 - Click a dropdown trinket to equip it into that slot.
@@ -24,10 +26,22 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Applies a synthetic 30 second equip lockout timer after equipping configured active/proc trinkets or unknown trinkets without a detectable item cooldown.
 - Shows a small queued-item overlay when a combat-locked swap or unequip is waiting.
 - Saves the trinket frame position and display settings in `KravaCooldownTrackerDB`.
-- Opens a tabbed immediate-apply config modal with `/kct`: a **General** tab (font family, lock, and a per-feature enable/disable list) and one tab per enabled feature (currently **Trinkets**).
+
+### Debuffs
+
+- Tracks a fixed set of 12 important harmful debuffs on your current `target`: Major Armor Reduction (Sunder Armor / Expose Armor), Curse of Recklessness, Curse of the Elements, Hunter's Mark, Scorpid Sting, Judgement of the Crusader, Judgement of Wisdom, Demoralizing Shout/Roar, Faerie Fire, Judgement of Light, Shadow Vulnerability, and Thunder Clap.
+- Every enabled debuff always shows an icon: greyed out and static as a placeholder when the debuff is not on the target, and lit in full color with a live countdown (and stack count where applicable) when it is present.
+- The debuff list is fixed and not user-editable beyond an on/off checkbox per debuff. All 12 are enabled by default.
+- Grid layout is configurable: icon size, font size, growth direction (horizontal or vertical), and the number of icons per line. Horizontal fills left-to-right then wraps down; vertical fills top-to-bottom then wraps to the next column.
+- Disabled debuffs are skipped with no blank gap, so unchecking one in the middle of the list reflows the remaining icons. This is expected behavior, not a bug.
+- The debuff tracker has its own movable frame, its own lock state, and its own saved position, fully independent of the trinket tracker.
+
+### Config
+
+- Opens a tabbed immediate-apply config modal with `/kct`: a **General** tab (font family, lock, and a per-feature enable/disable list) and one tab per enabled feature (**Trinkets** and **Debuffs**).
 - Enable or disable a feature from the General tab. Disabling a feature hides both its config tab and its entire in-world display; re-enabling restores them without `/reload`.
-- Configures per-feature icon sizes, font size, suggestion options, and a selectable suggestion-available sound inside the feature's own tab, plus a default-on option to prevent main-icon clicks from using equipped trinkets.
-- The chosen font family applies to the addon's in-world text (trinket tracker, suggestions, dropdown). The config modal itself always uses Arial.
+- Configures per-feature icon sizes, font size, and layout/suggestion options inside the feature's own tab, plus a default-on option to prevent main-icon clicks from using equipped trinkets.
+- The chosen font family applies to the addon's in-world text (trinket tracker, suggestions, dropdown, debuff timers). The config modal itself always uses Arial.
 
 ## Controls
 
@@ -40,6 +54,8 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Unlock the tracker in `/kct` (General tab) or by right-clicking a main trinket icon: show left and right drag handles beside the trinkets.
 - Drag either unlocked handle: move the two-icon tracker frame.
 - Right-click either main trinket icon: toggle the locked/unlocked state (no effect in combat).
+- Right-click any debuff icon: toggle the debuff tracker's locked/unlocked state (no effect in combat). This affects only the debuff tracker, never the trinket tracker.
+- Unlock the debuff tracker (via right-click or the config) to show its drag handles, then drag a handle to move the debuff grid. Its position is saved independently of the trinket tracker.
 
 ## Visual States
 
@@ -47,6 +63,8 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Grey/desaturated icon with timer: trinket is on cooldown, in equip lockout, or waiting on a tracked internal cooldown.
 - Green timer plus gold glow: a configured player aura from the trinket is currently active.
 - Empty/question-mark icon: no trinket is equipped in that slot.
+- Greyed/desaturated debuff icon with no text: that debuff is enabled but not currently on your target.
+- Full-color debuff icon with countdown (and stack count when stacked): that debuff is active on your target.
 
 ## Installation
 
@@ -66,19 +84,21 @@ The folder should contain `KravaCooldownTracker.toc` directly at its root. Resta
 
 ```text
 KravaCooldownTracker.toc
-KravaCooldownTracker.lua
+KravaCooldownTracker_Trinkets.lua
 KravaCooldownTracker_Helpers.lua
 KravaCooldownTracker_Config.lua
-KravaCooldownTracker_Trinkets.lua
 KravaCooldownTracker_TrinketLogic.lua
+KravaCooldownTracker_DebuffLogic.lua
+KravaCooldownTracker.lua
 ```
 
 - `KravaCooldownTracker.toc` defines addon metadata, saved variables, and load order.
-- `KravaCooldownTracker.lua` creates the main frame, slot buttons, drag handles, event frame, saved-position handling, and update loop.
+- `KravaCooldownTracker.lua` creates the main trinket and debuff frames, slot/row buttons, drag handles, event frame, saved-position handling, and update loops.
 - `KravaCooldownTracker_Helpers.lua` contains compatibility helpers for combat checks, time formatting, auras, bags, cooldowns, and icon styling.
-- `KravaCooldownTracker_Config.lua` contains saved display settings, `/kct`, font options, and the compact config modal.
+- `KravaCooldownTracker_Config.lua` contains saved display settings, `/kct`, font options, and the compact tabbed config modal.
 - `KravaCooldownTracker_Trinkets.lua` contains trinket metadata keyed by item ID.
 - `KravaCooldownTracker_TrinketLogic.lua` handles bag scanning, dropdown UI, equipping/queueing, overlay timers, equip lockout, and proc ICD tracking.
+- `KravaCooldownTracker_DebuffLogic.lua` holds the fixed debuff table, per-target aura scanning, and pure grid-layout math for the debuff tracker.
 
 ## Saved Variables
 
@@ -88,10 +108,17 @@ The addon uses one account-wide saved variable table:
 KravaCooldownTrackerDB
 ```
 
-It stores the tracker frame position:
+It stores each tracker's frame position separately. `pos` is the trinket tracker; `debuffPos` is the debuff tracker:
 
 ```lua
 KravaCooldownTrackerDB.pos = {
+  point = "...",
+  relPoint = "...",
+  x = 0,
+  y = 0,
+}
+
+KravaCooldownTrackerDB.debuffPos = {
   point = "...",
   relPoint = "...",
   x = 0,
@@ -112,8 +139,22 @@ KravaCooldownTrackerDB.config = {
   disableUpperTrinketSuggestions = true,
   disableLowerTrinketSuggestions = true,
   suggestionAvailableSound = "none",
+  -- Debuff tracker settings
+  debuffIconSize = 32,
+  debuffFontSize = 14,
+  debuffDirection = "horizontal", -- or "vertical"
+  debuffPerLine = 8,
+  debuffLocked = true,
+  debuffs = {
+    -- per-debuff on/off, all true by default
+    majorArmorReduction = true,
+    curseOfRecklessness = true,
+    -- ... one key per tracked debuff ...
+    thunderClap = true,
+  },
   features = {
     trinkets = true,
+    debuffs = true,
   },
 }
 ```
@@ -183,3 +224,6 @@ If the trinket effect does not create a player buff, omit `buffSpellIds`. The ad
 - Combat-log aura events do not identify the source item. If both equipped trinkets share the same configured aura spell ID, the addon avoids assigning the aura or ICD to either slot instead of guessing.
 - Trinkets that apply debuffs to targets instead of player buffs cannot show active player aura timers with the current logic.
 - Queued swaps are kept only in memory and are not saved across reloads.
+- The debuff tracker only follows your current `target`; it does not track focus, arena, or nameplate units.
+- The tracked debuff list is fixed and cannot be extended with custom spell IDs; debuffs can only be toggled on or off.
+- Debuffs are matched by aura name, so same-named auras from any source will light up the icon regardless of who applied them.
