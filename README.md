@@ -18,6 +18,7 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 
 - Shows both player trinket slots, inventory slots `13` and `14`.
 - Hover a trinket slot to open a vertical dropdown of trinkets found in bags `0` through `4`.
+- Maintains separate per-item blacklists for the bag dropdown and automatic suggestions.
 - Click a dropdown trinket to equip it into that slot.
 - Queues a requested trinket swap while in combat, then attempts the swap when combat ends.
 - Displays item cooldowns on equipped trinkets and bag-dropdown trinkets.
@@ -41,6 +42,7 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 - Opens a tabbed immediate-apply config modal with `/kct`: a **General** tab (font family, lock, and a per-feature enable/disable list) and one tab per enabled feature (**Trinkets** and **Debuffs**).
 - Enable or disable a feature from the General tab. Disabling a feature hides both its config tab and its entire in-world display; re-enabling restores them without `/reload`.
 - Configures per-feature icon sizes, font size, and layout/suggestion options inside the feature's own tab, plus a default-on option to prevent main-icon clicks from using equipped trinkets.
+- The Trinkets tab lists carried, equipped, and previously disabled trinkets in separate dropdown and suggestion lists. Clicking an item with either mouse button toggles it. Disabled icons are dark and desaturated, and hovering an icon shows its item tooltip.
 - The chosen font family applies to the addon's in-world text (trinket tracker, suggestions, dropdown, debuff timers). The config modal itself always uses Arial.
 
 ## Controls

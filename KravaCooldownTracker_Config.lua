@@ -284,6 +284,13 @@ function C.Normalize()
 		cfg.disableLowerTrinketSuggestions = DEFAULT_DISABLE_LOWER_TRINKET_SUGGESTIONS
 	end
 
+	if type(cfg.trinketDropdownBlacklist) ~= "table" then
+		cfg.trinketDropdownBlacklist = {}
+	end
+	if type(cfg.trinketSuggestionBlacklist) ~= "table" then
+		cfg.trinketSuggestionBlacklist = {}
+	end
+
 	return cfg
 end
 
@@ -498,11 +505,34 @@ local function RefreshModalValues(frame)
 		end
 	end
 
+	if frame.RefreshTrinketBlacklistLists then
+		frame.RefreshTrinketBlacklistLists()
+	end
+
 	if frame.UpdateTabVisibility then
 		frame.UpdateTabVisibility()
 	end
 
 	C.ApplyModalFont()
+end
+
+function C.SetTrinketBlacklisted(kind, itemId, disabled)
+	itemId = tonumber(itemId)
+	if not itemId then return end
+	local cfg = C.Get()
+	local key = kind == "dropdown" and "trinketDropdownBlacklist" or "trinketSuggestionBlacklist"
+	cfg[key][itemId] = disabled and true or nil
+	C.Set(key, cfg[key])
+	C.RefreshChanged()
+	if C.modal and C.modal.RefreshTrinketBlacklistLists then
+		C.modal.RefreshTrinketBlacklistLists()
+	end
+end
+
+function C.RefreshTrinketBlacklistLists()
+	if C.modal and C.modal:IsShown() and C.modal.RefreshTrinketBlacklistLists then
+		C.modal.RefreshTrinketBlacklistLists()
+	end
 end
 
 local StyleDropdownButton
@@ -1045,13 +1075,97 @@ local function CreateDebuffToggleCheckbox(parent, debuffKey, x, y)
 	return check
 end
 
+local function CreateTrinketBlacklistList(parent, kind, titleText, y)
+	local list = CreateFrame("Frame", nil, parent)
+	list:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y)
+	list:SetSize(308, 88)
+	list:EnableMouse(true)
+	list:EnableMouseWheel(true)
+	list.buttons = {}
+	list.page = 1
+
+	list.title = CreateSectionHeader(list, titleText, 0, 0)
+	list.pageText = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	list.pageText:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, -2)
+	C.RegisterFontString(list.pageText)
+
+	local function GetButton(index)
+		local button = list.buttons[index]
+		if button then return button end
+		button = CreateFrame("Button", nil, list)
+		button:SetSize(22, 22)
+		button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		button.icon = button:CreateTexture(nil, "ARTWORK")
+		button.icon:SetAllPoints(button)
+		button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		button.highlight = button:CreateTexture(nil, "HIGHLIGHT")
+		button.highlight:SetAllPoints(button)
+		button.highlight:SetColorTexture(1, 1, 1, 0.18)
+		button:SetScript("OnEnter", function(self)
+			if not self.__itemId or not GameTooltip then return end
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetHyperlink(self.__link or ("item:" .. self.__itemId))
+			GameTooltip:AddLine("Click: toggle", 0.85, 0.85, 0.85)
+			GameTooltip:Show()
+		end)
+		button:SetScript("OnLeave", function()
+			if GameTooltip then GameTooltip:Hide() end
+		end)
+		button:SetScript("OnClick", function(self)
+			if not self.__itemId then return end
+			local logic = KravaCooldownTracker_TrinketLogic
+			local disabled = logic and logic.IsTrinketBlacklisted and logic.IsTrinketBlacklisted(kind, self.__itemId)
+			C.SetTrinketBlacklisted(kind, self.__itemId, not disabled)
+		end)
+		list.buttons[index] = button
+		return button
+	end
+
+	function list:Refresh()
+		local logic = KravaCooldownTracker_TrinketLogic
+		local items = logic and logic.GetInventoryTrinkets and logic.GetInventoryTrinkets() or {}
+		local perPage = 36
+		local pages = math.max(1, math.ceil(#items / perPage))
+		self.page = math.min(math.max(1, self.page or 1), pages)
+		self.pageText:SetText(pages > 1 and (self.page .. "/" .. pages .. "  (wheel)") or "")
+		local visibleCount = math.min(perPage, math.max(0, #items - ((self.page - 1) * perPage)))
+		local visibleRows = math.max(1, math.ceil(visibleCount / 12))
+		self:SetHeight(22 + visibleRows * 24)
+
+		for _, button in ipairs(self.buttons) do button:Hide() end
+		local first = (self.page - 1) * perPage + 1
+		for displayIndex = 1, perPage do
+			local item = items[first + displayIndex - 1]
+			if not item then break end
+			local button = GetButton(displayIndex)
+			local column = (displayIndex - 1) % 12
+			local row = math.floor((displayIndex - 1) / 12)
+			button:ClearAllPoints()
+			button:SetPoint("TOPLEFT", self, "TOPLEFT", column * 24, -22 - row * 24)
+			button.icon:SetTexture(item.icon)
+			local disabled = logic.IsTrinketBlacklisted(kind, item.itemId)
+			button.icon:SetDesaturated(disabled)
+			button.icon:SetVertexColor(disabled and 0.35 or 1, disabled and 0.35 or 1, disabled and 0.35 or 1, 1)
+			button.__itemId = item.itemId
+			button.__link = item.link
+			button:Show()
+		end
+	end
+
+	list:SetScript("OnMouseWheel", function(self, delta)
+		self.page = math.max(1, (self.page or 1) - delta)
+		self:Refresh()
+	end)
+	return list
+end
+
 function C.CreateModal()
 	if C.modal then return C.modal end
 	if not UIParent then return nil end
 
 	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
 	local frame = CreateFrame("Frame", "KravaCooldownTrackerConfigModal", UIParent, backdropTemplate)
-	frame:SetSize(320, 440)
+	frame:SetSize(340, 620)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetFrameStrata("DIALOG")
 	frame:EnableMouse(true)
@@ -1200,6 +1314,15 @@ function C.CreateModal()
 
 	CreateLabel(tp, "Disable suggestions for lower trinket", 16, -342)
 	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(tp, "disableLowerTrinketSuggestions", -18, -336)
+
+	frame.dropdownBlacklistList = CreateTrinketBlacklistList(tp, "dropdown", "Dropdown trinkets", -370)
+	frame.suggestionBlacklistList = CreateTrinketBlacklistList(tp, "suggestion", "Suggestion trinkets", -466)
+	frame.RefreshTrinketBlacklistLists = function()
+		frame.dropdownBlacklistList:Refresh()
+		frame.suggestionBlacklistList:ClearAllPoints()
+		frame.suggestionBlacklistList:SetPoint("TOPLEFT", frame.dropdownBlacklistList, "BOTTOMLEFT", 0, -8)
+		frame.suggestionBlacklistList:Refresh()
+	end
 
 	-- Debuffs pane
 	local dp = frame.debuffsPane

@@ -755,6 +755,9 @@ loader:SetScript("OnEvent", function(_, event, ...)
 
 	if event == "PLAYER_EQUIPMENT_CHANGED" then
 		T.OnEquipmentChanged(...)
+		if C and C.RefreshTrinketBlacklistLists then
+			C.RefreshTrinketBlacklistLists()
+		end
 		if T.UpdateSuggestion then
 			T.UpdateSuggestion((...))
 		end
@@ -762,6 +765,9 @@ loader:SetScript("OnEvent", function(_, event, ...)
 	end
 
 	if event == "BAG_UPDATE" or event == "BAG_UPDATE_DELAYED" or event == "ITEM_DATA_LOAD_RESULT" then
+		if C and C.RefreshTrinketBlacklistLists then
+			C.RefreshTrinketBlacklistLists()
+		end
 		for _, slotId in ipairs(T.TRINKET_SLOTS) do
 			if T.dropdown[slotId] and T.dropdown[slotId]:IsShown() then
 				T.UpdateDropdown(slotId)

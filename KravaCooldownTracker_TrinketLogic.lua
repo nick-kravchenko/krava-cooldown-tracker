@@ -191,6 +191,47 @@ function T.GetBagTrinkets()
 	return trinkets
 end
 
+local function GetBlacklist(kind)
+	local config = KravaCooldownTracker_Config
+	local cfg = config and config.Get and config.Get()
+	if not cfg then return {} end
+	if kind == "dropdown" then return cfg.trinketDropdownBlacklist or {} end
+	if kind == "suggestion" then return cfg.trinketSuggestionBlacklist or {} end
+	return {}
+end
+
+function T.IsTrinketBlacklisted(kind, itemId)
+	return itemId and GetBlacklist(kind)[itemId] == true or false
+end
+
+-- A unique list for the settings UI. Equipped items are included, and saved
+-- blacklist entries remain visible even after an item leaves the bags.
+function T.GetInventoryTrinkets()
+	local items, seen = {}, {}
+	local function Add(itemId, item)
+		itemId = tonumber(itemId)
+		if not itemId or seen[itemId] then return end
+		seen[itemId] = true
+		local name, link = GetItemInfo(itemId)
+		items[#items + 1] = {
+			itemId = itemId,
+			name = name or (item and item.name) or ("item:" .. itemId),
+			link = link or (item and item.link),
+			icon = H.GetItemIcon(itemId),
+		}
+	end
+
+	for _, item in ipairs(T.GetBagTrinkets()) do Add(item.itemId, item) end
+	for _, slotId in ipairs(T.TRINKET_SLOTS) do Add(GetInventoryItemID("player", slotId)) end
+	for itemId in pairs(GetBlacklist("dropdown")) do Add(itemId) end
+	for itemId in pairs(GetBlacklist("suggestion")) do Add(itemId) end
+
+	table.sort(items, function(a, b)
+		return (a.name or "") < (b.name or "")
+	end)
+	return items
+end
+
 -- -------------------------------
 -- Suggestion helpers
 -- -------------------------------
@@ -205,19 +246,21 @@ function T.GetSuggestionCandidates()
 	local passiveCandidates = {}
 
 	for _, it in ipairs(T.GetBagTrinkets()) do
-		if IsUsableTrinketItem(it.itemId) then
-			local cd = H.GetRemainingCooldownForBagSlot(it.bag, it.slot)
-			if cd <= T.SUGGESTION_CANDIDATE_THRESHOLD then
-				it.cooldownRemaining = cd
-				it.isUsableSuggestion = true
-				candidates[#candidates + 1] = it
-			end
-		else
-			local cfg = GetItemCfg(it.itemId)
-			if cfg and (cfg.kind == "passive" or cfg.kind == "proc") then
-				it.cooldownRemaining = 0
-				it.isUsableSuggestion = false
-				passiveCandidates[#passiveCandidates + 1] = it
+		if not T.IsTrinketBlacklisted("suggestion", it.itemId) then
+			if IsUsableTrinketItem(it.itemId) then
+				local cd = H.GetRemainingCooldownForBagSlot(it.bag, it.slot)
+				if cd <= T.SUGGESTION_CANDIDATE_THRESHOLD then
+					it.cooldownRemaining = cd
+					it.isUsableSuggestion = true
+					candidates[#candidates + 1] = it
+				end
+			else
+				local cfg = GetItemCfg(it.itemId)
+				if cfg and (cfg.kind == "passive" or cfg.kind == "proc") then
+					it.cooldownRemaining = 0
+					it.isUsableSuggestion = false
+					passiveCandidates[#passiveCandidates + 1] = it
+				end
 			end
 		end
 	end
@@ -722,7 +765,12 @@ function T.UpdateDropdown(slotId)
 	local f = T.dropdown[slotId]
 	if not f then return end
 
-	local items = T.GetBagTrinkets()
+	local items = {}
+	for _, item in ipairs(T.GetBagTrinkets()) do
+		if not T.IsTrinketBlacklisted("dropdown", item.itemId) then
+			items[#items + 1] = item
+		end
+	end
 
 	for _, btn in ipairs(f.buttons) do
 		btn:Hide()
