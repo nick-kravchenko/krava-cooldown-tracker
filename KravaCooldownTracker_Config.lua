@@ -19,6 +19,10 @@ local DEFAULT_DEBUFF_FONT_SIZE = 14
 local DEFAULT_DEBUFF_PER_LINE = 8
 local DEFAULT_DEBUFF_LOCKED = true
 local DEFAULT_DEBUFF_DIRECTION = "horizontal"
+local DEFAULT_CONSUMABLE_ICON_SIZE = 32
+local DEFAULT_CONSUMABLE_FONT_SIZE = 14
+local DEFAULT_CONSUMABLE_LOCKED = true
+local DEFAULT_CONSUMABLE_RAID_ONLY = true
 
 local MIN_MAIN_ICON_SIZE = 14
 local MAX_MAIN_ICON_SIZE = 48
@@ -34,6 +38,10 @@ local MIN_DEBUFF_FONT_SIZE = 10
 local MAX_DEBUFF_FONT_SIZE = 32
 local MIN_DEBUFF_PER_LINE = 1
 local MAX_DEBUFF_PER_LINE = 12
+local MIN_CONSUMABLE_ICON_SIZE = 14
+local MAX_CONSUMABLE_ICON_SIZE = 48
+local MIN_CONSUMABLE_FONT_SIZE = 10
+local MAX_CONSUMABLE_FONT_SIZE = 32
 local DROPDOWN_ROW_HEIGHT = 24
 local MAX_DROPDOWN_ROWS = 7
 
@@ -244,6 +252,8 @@ function C.Normalize()
 	cfg.debuffFontSize = ClampNumber(cfg.debuffFontSize, MIN_DEBUFF_FONT_SIZE, MAX_DEBUFF_FONT_SIZE, DEFAULT_DEBUFF_FONT_SIZE)
 	cfg.debuffPerLine = ClampNumber(cfg.debuffPerLine, MIN_DEBUFF_PER_LINE, MAX_DEBUFF_PER_LINE, DEFAULT_DEBUFF_PER_LINE)
 	cfg.debuffDirection = NormalizeDebuffDirection(cfg.debuffDirection)
+	cfg.consumableIconSize = ClampNumber(cfg.consumableIconSize, MIN_CONSUMABLE_ICON_SIZE, MAX_CONSUMABLE_ICON_SIZE, DEFAULT_CONSUMABLE_ICON_SIZE)
+	cfg.consumableFontSize = ClampNumber(cfg.consumableFontSize, MIN_CONSUMABLE_FONT_SIZE, MAX_CONSUMABLE_FONT_SIZE, DEFAULT_CONSUMABLE_FONT_SIZE)
 
 	if not IsUsableFontPath(cfg.fontFace) then
 		cfg.fontFace = GetDefaultFont()
@@ -256,6 +266,12 @@ function C.Normalize()
 	if type(cfg.debuffLocked) ~= "boolean" then
 		cfg.debuffLocked = DEFAULT_DEBUFF_LOCKED
 	end
+	if type(cfg.consumableLocked) ~= "boolean" then
+		cfg.consumableLocked = DEFAULT_CONSUMABLE_LOCKED
+	end
+	if type(cfg.consumableRaidOnly) ~= "boolean" then
+		cfg.consumableRaidOnly = DEFAULT_CONSUMABLE_RAID_ONLY
+	end
 
 	cfg.features = cfg.features or {}
 	if type(cfg.features.trinkets) ~= "boolean" then
@@ -263,6 +279,9 @@ function C.Normalize()
 	end
 	if type(cfg.features.debuffs) ~= "boolean" then
 		cfg.features.debuffs = true
+	end
+	if type(cfg.features.consumables) ~= "boolean" then
+		cfg.features.consumables = true
 	end
 
 	cfg.debuffs = cfg.debuffs or {}
@@ -497,6 +516,13 @@ local function RefreshModalValues(frame)
 
 	if frame.debuffsFeatureCheck then
 		frame.debuffsFeatureCheck:SetChecked(C.IsFeatureEnabled("debuffs"))
+	end
+	if frame.consumableIconSizeSlider then frame.consumableIconSizeSlider:SetValue(cfg.consumableIconSize) end
+	if frame.consumableFontSizeSlider then frame.consumableFontSizeSlider:SetValue(cfg.consumableFontSize) end
+	if frame.consumableLockedCheck then frame.consumableLockedCheck:SetChecked(cfg.consumableLocked) end
+	if frame.consumableRaidOnlyCheck then frame.consumableRaidOnlyCheck:SetChecked(cfg.consumableRaidOnly) end
+	if frame.consumablesFeatureCheck then
+		frame.consumablesFeatureCheck:SetChecked(C.IsFeatureEnabled("consumables"))
 	end
 
 	if frame.debuffToggles then
@@ -1165,7 +1191,7 @@ function C.CreateModal()
 
 	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
 	local frame = CreateFrame("Frame", "KravaCooldownTrackerConfigModal", UIParent, backdropTemplate)
-	frame:SetSize(340, 620)
+	frame:SetSize(400, 620)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetFrameStrata("DIALOG")
 	frame:EnableMouse(true)
@@ -1193,6 +1219,7 @@ function C.CreateModal()
 	frame.generalTab = CreateTabButton(frame, "General", 10)
 	frame.trinketsTab = CreateTabButton(frame, "Trinkets", 98)
 	frame.debuffsTab = CreateTabButton(frame, "Debuffs", 186)
+	frame.consumablesTab = CreateTabButton(frame, "Consumables", 274)
 
 	-- Panes (only one shown at a time)
 	frame.generalPane = CreateFrame("Frame", nil, frame)
@@ -1207,35 +1234,56 @@ function C.CreateModal()
 	frame.debuffsPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
 	frame.debuffsPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
+	frame.consumablesPane = CreateFrame("Frame", nil, frame)
+	frame.consumablesPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
+	frame.consumablesPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+
 	local function SetActivePane(name)
 		if name == "trinkets" and C.IsFeatureEnabled("trinkets") then
 			frame.activePane = "trinkets"
 		elseif name == "debuffs" and C.IsFeatureEnabled("debuffs") then
 			frame.activePane = "debuffs"
+		elseif name == "consumables" and C.IsFeatureEnabled("consumables") then
+			frame.activePane = "consumables"
 		else
 			frame.activePane = "general"
 		end
 		if frame.activePane == "trinkets" then
 			frame.generalPane:Hide()
 			frame.debuffsPane:Hide()
+			frame.consumablesPane:Hide()
 			frame.trinketsPane:Show()
 			frame.generalTab:SetActive(false)
 			frame.trinketsTab:SetActive(true)
 			frame.debuffsTab:SetActive(false)
+			frame.consumablesTab:SetActive(false)
 		elseif frame.activePane == "debuffs" then
 			frame.generalPane:Hide()
 			frame.trinketsPane:Hide()
+			frame.consumablesPane:Hide()
 			frame.debuffsPane:Show()
 			frame.generalTab:SetActive(false)
 			frame.trinketsTab:SetActive(false)
 			frame.debuffsTab:SetActive(true)
+			frame.consumablesTab:SetActive(false)
+		elseif frame.activePane == "consumables" then
+			frame.generalPane:Hide()
+			frame.trinketsPane:Hide()
+			frame.debuffsPane:Hide()
+			frame.consumablesPane:Show()
+			frame.generalTab:SetActive(false)
+			frame.trinketsTab:SetActive(false)
+			frame.debuffsTab:SetActive(false)
+			frame.consumablesTab:SetActive(true)
 		else
 			frame.trinketsPane:Hide()
 			frame.debuffsPane:Hide()
+			frame.consumablesPane:Hide()
 			frame.generalPane:Show()
 			frame.generalTab:SetActive(true)
 			frame.trinketsTab:SetActive(false)
 			frame.debuffsTab:SetActive(false)
+			frame.consumablesTab:SetActive(false)
 		end
 	end
 	frame.SetActivePane = SetActivePane
@@ -1243,6 +1291,7 @@ function C.CreateModal()
 	frame.generalTab:SetScript("OnClick", function() SetActivePane("general") end)
 	frame.trinketsTab:SetScript("OnClick", function() SetActivePane("trinkets") end)
 	frame.debuffsTab:SetScript("OnClick", function() SetActivePane("debuffs") end)
+	frame.consumablesTab:SetScript("OnClick", function() SetActivePane("consumables") end)
 
 	local function UpdateTabVisibility()
 		if C.IsFeatureEnabled("trinkets") then
@@ -1260,6 +1309,12 @@ function C.CreateModal()
 			if frame.activePane == "debuffs" then
 				SetActivePane("general")
 			end
+		end
+		if C.IsFeatureEnabled("consumables") then
+			frame.consumablesTab:Show()
+		else
+			frame.consumablesTab:Hide()
+			if frame.activePane == "consumables" then SetActivePane("general") end
 		end
 	end
 	frame.UpdateTabVisibility = UpdateTabVisibility
@@ -1279,6 +1334,10 @@ function C.CreateModal()
 	end)
 	CreateLabel(gp, "Debuffs", 28, -130)
 	frame.debuffsFeatureCheck = CreateFeatureCheckbox(gp, "debuffs", -18, -124, function()
+		UpdateTabVisibility()
+	end)
+	CreateLabel(gp, "Consumables", 28, -156)
+	frame.consumablesFeatureCheck = CreateFeatureCheckbox(gp, "consumables", -18, -150, function()
 		UpdateTabVisibility()
 	end)
 
@@ -1355,6 +1414,18 @@ function C.CreateModal()
 			frame.debuffToggles[entry.key] = check
 		end
 	end
+
+	-- Consumables pane
+	local cp = frame.consumablesPane
+	CreateSectionHeader(cp, "Layout", 16, -12)
+	CreateLabel(cp, "Icon size", 16, -38)
+	frame.consumableIconSizeSlider = CreateRangeSlider(cp, "consumableIconSize", -18, -40, 142, MIN_CONSUMABLE_ICON_SIZE, MAX_CONSUMABLE_ICON_SIZE, "px")
+	CreateLabel(cp, "Font size", 16, -74)
+	frame.consumableFontSizeSlider = CreateRangeSlider(cp, "consumableFontSize", -18, -76, 142, MIN_CONSUMABLE_FONT_SIZE, MAX_CONSUMABLE_FONT_SIZE, "px")
+	CreateLabel(cp, "Locked", 16, -118)
+	frame.consumableLockedCheck = CreateSettingCheckbox(cp, "consumableLocked", -18, -112)
+	CreateLabel(cp, "Show only in raid", 16, -148)
+	frame.consumableRaidOnlyCheck = CreateSettingCheckbox(cp, "consumableRaidOnly", -18, -142)
 
 	SetActivePane("general")
 	UpdateTabVisibility()
