@@ -4,6 +4,11 @@
 -- buffSpellIds = { ... }  -- player aura spell IDs to track (proc/active buffs)
 -- icd = number            -- internal cooldown seconds (only for proc trinkets, optional)
 
+-- Classic Anniversary may load Blizzard_AuctionUI without first defining this
+-- legacy FrameXML constant. TSM force-loads that UI shortly after login, which
+-- otherwise makes AuctionProgressFrame's fade-out handler error every frame.
+CASTING_BAR_ALPHA_STEP = CASTING_BAR_ALPHA_STEP or 0.05
+
 KravaCooldownTracker_TrinketCfg = {
 
 	-- =========================
@@ -55,6 +60,12 @@ KravaCooldownTracker_TrinketCfg = {
 	-- 30627 Tsunami Talisman (proc)
 	[30627] = { kind = "proc", buffSpellIds = { 42084 }, icd = 45 },
 
+	-- 32505 Madness of the Betrayer (proc)
+	[32505] = { kind = "proc", buffSpellIds = { 40477 }, icd = 45 },
+
+	-- 33831 Berserker's Call (on-use AP)
+	[33831] = { kind = "active", buffSpellIds = { 43716 } },
+
 
 	-- =========================
 	-- Utility / Engineering
@@ -80,6 +91,12 @@ KravaCooldownTracker_TrinketCfg = {
 
 	-- 29370 Icon of the Silver Crescent (on-use spell power)
 	[29370] = { kind = "active", buffSpellIds = { 35163 } },
+
+	-- 32483 The Skull of Gul'dan (on-use spell haste)
+	[32483] = { kind = "active", buffSpellIds = { 40396 } },
+
+	-- 33829 Hex Shrunken Head (on-use spell power)
+	[33829] = { kind = "active", buffSpellIds = { 43712 } },
 
 	-- 27683 Quagmirran's Eye (proc haste)
 	[27683] = { kind = "proc", buffSpellIds = { 33370 }, icd = 45 },
@@ -132,6 +149,9 @@ KravaCooldownTracker_TrinketCfg = {
 
 	-- 29376 Essence of the Martyr (use)
 	[29376] = { kind = "active", buffSpellIds = { 35165 } },
+
+	-- 32496 Memento of Tyrande (proc)
+	[32496] = { kind = "proc", buffSpellIds = { 37656 } },
 
 	-- 30841 Lower City Prayerbook (proc)
 	[30841] = { kind = "active", buffSpellIds = { 37877 } },
