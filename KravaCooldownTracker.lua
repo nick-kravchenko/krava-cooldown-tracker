@@ -16,6 +16,7 @@ local T = KravaCooldownTracker_TrinketLogic
 local D = KravaCooldownTracker_DebuffLogic
 local C = KravaCooldownTracker_Config
 local CL = KravaCooldownTracker_ConsumableLogic
+local RN = KravaCooldownTracker_RaidNotes
 
 -- wire UI knobs into module
 T.ADDON_NAME = ADDON_NAME
@@ -660,6 +661,7 @@ local function RefreshAllDisplays()
 	RefreshTrackerDisplay()
 	RefreshDebuffDisplay()
 	if CL and CL.RefreshRuntime then CL.RefreshRuntime() end
+	if RN and RN.Refresh then RN.Refresh(true) end
 end
 
 KravaCooldownTracker_RefreshDisplay = RefreshAllDisplays

@@ -42,6 +42,10 @@ local MIN_CONSUMABLE_ICON_SIZE = 14
 local MAX_CONSUMABLE_ICON_SIZE = 48
 local MIN_CONSUMABLE_FONT_SIZE = 10
 local MAX_CONSUMABLE_FONT_SIZE = 32
+local DEFAULT_RAID_NOTES_FONT_SIZE = 12
+local DEFAULT_RAID_NOTES_PADDING = 6
+local DEFAULT_RAID_NOTES_GAP = 2
+local DEFAULT_RAID_NOTES_BORDER_WIDTH = 1
 local DROPDOWN_ROW_HEIGHT = 24
 local MAX_DROPDOWN_ROWS = 7
 
@@ -254,6 +258,12 @@ function C.Normalize()
 	cfg.debuffDirection = NormalizeDebuffDirection(cfg.debuffDirection)
 	cfg.consumableIconSize = ClampNumber(cfg.consumableIconSize, MIN_CONSUMABLE_ICON_SIZE, MAX_CONSUMABLE_ICON_SIZE, DEFAULT_CONSUMABLE_ICON_SIZE)
 	cfg.consumableFontSize = ClampNumber(cfg.consumableFontSize, MIN_CONSUMABLE_FONT_SIZE, MAX_CONSUMABLE_FONT_SIZE, DEFAULT_CONSUMABLE_FONT_SIZE)
+	cfg.raidNotesFontSize = ClampNumber(cfg.raidNotesFontSize, 8, 32, DEFAULT_RAID_NOTES_FONT_SIZE)
+	cfg.raidNotesPadding = ClampNumber(cfg.raidNotesPadding, 0, 20, DEFAULT_RAID_NOTES_PADDING)
+	cfg.raidNotesGap = ClampNumber(cfg.raidNotesGap, 0, 20, DEFAULT_RAID_NOTES_GAP)
+	cfg.raidNotesBorderWidth = ClampNumber(cfg.raidNotesBorderWidth, 0, 8, DEFAULT_RAID_NOTES_BORDER_WIDTH)
+	if type(cfg.raidNotesBackgroundColor) ~= "table" then cfg.raidNotesBackgroundColor = { 0.08, 0.08, 0.08, 0.9 } end
+	if type(cfg.raidNotesBorderColor) ~= "table" then cfg.raidNotesBorderColor = { 0.4, 0.4, 0.4, 1 } end
 
 	if not IsUsableFontPath(cfg.fontFace) then
 		cfg.fontFace = GetDefaultFont()
@@ -272,6 +282,7 @@ function C.Normalize()
 	if type(cfg.consumableRaidOnly) ~= "boolean" then
 		cfg.consumableRaidOnly = DEFAULT_CONSUMABLE_RAID_ONLY
 	end
+	if type(cfg.raidNotesLocked) ~= "boolean" then cfg.raidNotesLocked = true end
 
 	cfg.features = cfg.features or {}
 	if type(cfg.features.trinkets) ~= "boolean" then
@@ -283,6 +294,7 @@ function C.Normalize()
 	if type(cfg.features.consumables) ~= "boolean" then
 		cfg.features.consumables = true
 	end
+	if type(cfg.features.raidNotes) ~= "boolean" then cfg.features.raidNotes = true end
 
 	cfg.debuffs = cfg.debuffs or {}
 	for _, key in ipairs(DEBUFF_KEYS) do
@@ -524,6 +536,14 @@ local function RefreshModalValues(frame)
 	if frame.consumablesFeatureCheck then
 		frame.consumablesFeatureCheck:SetChecked(C.IsFeatureEnabled("consumables"))
 	end
+	if frame.raidNotesFeatureCheck then frame.raidNotesFeatureCheck:SetChecked(C.IsFeatureEnabled("raidNotes")) end
+	if frame.raidNotesFontSizeSlider then frame.raidNotesFontSizeSlider:SetValue(cfg.raidNotesFontSize) end
+	if frame.raidNotesPaddingSlider then frame.raidNotesPaddingSlider:SetValue(cfg.raidNotesPadding) end
+	if frame.raidNotesGapSlider then frame.raidNotesGapSlider:SetValue(cfg.raidNotesGap) end
+	if frame.raidNotesBorderWidthSlider then frame.raidNotesBorderWidthSlider:SetValue(cfg.raidNotesBorderWidth) end
+	if frame.raidNotesLockedCheck then frame.raidNotesLockedCheck:SetChecked(cfg.raidNotesLocked) end
+	if frame.raidNotesBackgroundColorButton then frame.raidNotesBackgroundColorButton:Refresh() end
+	if frame.raidNotesBorderColorButton then frame.raidNotesBorderColorButton:Refresh() end
 
 	if frame.debuffToggles then
 		for key, check in pairs(frame.debuffToggles) do
@@ -1086,6 +1106,31 @@ local function CreateFeatureCheckbox(parent, featureName, x, y, onToggle)
 	return check
 end
 
+local function CreateColorButton(parent, key, x, y)
+	local button = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	button:SetSize(42, 20)
+	button:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
+	button.swatch = button:CreateTexture(nil, "ARTWORK")
+	button.swatch:SetAllPoints()
+	button:SetScript("OnClick", function()
+		local color = C.Get()[key]
+		local function apply()
+			local r, g, b = ColorPickerFrame:GetColorRGB()
+			local a = ColorPickerFrame.GetColorAlpha and ColorPickerFrame:GetColorAlpha() or color[4] or 1
+			C.Set(key, { r, g, b, a }); C.RefreshChanged()
+			button.swatch:SetColorTexture(r, g, b, a)
+		end
+		if ColorPickerFrame.SetupColorPickerAndShow then
+			ColorPickerFrame:SetupColorPickerAndShow({ r=color[1], g=color[2], b=color[3], opacity=color[4] or 1, hasOpacity=true, swatchFunc=apply, opacityFunc=apply })
+		else
+			ColorPickerFrame:SetColorRGB(color[1], color[2], color[3]); ColorPickerFrame.func = apply; ColorPickerFrame:Show()
+		end
+	end)
+	function button:Refresh() local c = C.Get()[key]; self.swatch:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
+	button:Refresh()
+	return button
+end
+
 -- Per-debuff toggle writes a nested cfg.debuffs[key] (not a flat cfg[key]), so it
 -- cannot reuse CreateSettingCheckbox/CreateFeatureCheckbox.
 local function CreateDebuffToggleCheckbox(parent, debuffKey, x, y)
@@ -1191,7 +1236,7 @@ function C.CreateModal()
 
 	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
 	local frame = CreateFrame("Frame", "KravaCooldownTrackerConfigModal", UIParent, backdropTemplate)
-	frame:SetSize(400, 620)
+	frame:SetSize(460, 620)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetFrameStrata("DIALOG")
 	frame:EnableMouse(true)
@@ -1220,6 +1265,7 @@ function C.CreateModal()
 	frame.trinketsTab = CreateTabButton(frame, "Trinkets", 98)
 	frame.debuffsTab = CreateTabButton(frame, "Debuffs", 186)
 	frame.consumablesTab = CreateTabButton(frame, "Consumables", 274)
+	frame.raidNotesTab = CreateTabButton(frame, "Raid Notes", 362)
 
 	-- Panes (only one shown at a time)
 	frame.generalPane = CreateFrame("Frame", nil, frame)
@@ -1237,6 +1283,9 @@ function C.CreateModal()
 	frame.consumablesPane = CreateFrame("Frame", nil, frame)
 	frame.consumablesPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
 	frame.consumablesPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+	frame.raidNotesPane = CreateFrame("Frame", nil, frame)
+	frame.raidNotesPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
+	frame.raidNotesPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
 	local function SetActivePane(name)
 		if name == "trinkets" and C.IsFeatureEnabled("trinkets") then
@@ -1245,6 +1294,8 @@ function C.CreateModal()
 			frame.activePane = "debuffs"
 		elseif name == "consumables" and C.IsFeatureEnabled("consumables") then
 			frame.activePane = "consumables"
+		elseif name == "raidNotes" and C.IsFeatureEnabled("raidNotes") then
+			frame.activePane = "raidNotes"
 		else
 			frame.activePane = "general"
 		end
@@ -1252,38 +1303,50 @@ function C.CreateModal()
 			frame.generalPane:Hide()
 			frame.debuffsPane:Hide()
 			frame.consumablesPane:Hide()
+			frame.raidNotesPane:Hide()
 			frame.trinketsPane:Show()
 			frame.generalTab:SetActive(false)
 			frame.trinketsTab:SetActive(true)
 			frame.debuffsTab:SetActive(false)
 			frame.consumablesTab:SetActive(false)
+			frame.raidNotesTab:SetActive(false)
 		elseif frame.activePane == "debuffs" then
 			frame.generalPane:Hide()
 			frame.trinketsPane:Hide()
 			frame.consumablesPane:Hide()
+			frame.raidNotesPane:Hide()
 			frame.debuffsPane:Show()
 			frame.generalTab:SetActive(false)
 			frame.trinketsTab:SetActive(false)
 			frame.debuffsTab:SetActive(true)
 			frame.consumablesTab:SetActive(false)
+			frame.raidNotesTab:SetActive(false)
 		elseif frame.activePane == "consumables" then
 			frame.generalPane:Hide()
 			frame.trinketsPane:Hide()
 			frame.debuffsPane:Hide()
 			frame.consumablesPane:Show()
+			frame.raidNotesPane:Hide()
 			frame.generalTab:SetActive(false)
 			frame.trinketsTab:SetActive(false)
 			frame.debuffsTab:SetActive(false)
 			frame.consumablesTab:SetActive(true)
+			frame.raidNotesTab:SetActive(false)
+		elseif frame.activePane == "raidNotes" then
+			frame.generalPane:Hide(); frame.trinketsPane:Hide(); frame.debuffsPane:Hide(); frame.consumablesPane:Hide()
+			frame.raidNotesPane:Show()
+			frame.generalTab:SetActive(false); frame.trinketsTab:SetActive(false); frame.debuffsTab:SetActive(false); frame.consumablesTab:SetActive(false); frame.raidNotesTab:SetActive(true)
 		else
 			frame.trinketsPane:Hide()
 			frame.debuffsPane:Hide()
 			frame.consumablesPane:Hide()
+			frame.raidNotesPane:Hide()
 			frame.generalPane:Show()
 			frame.generalTab:SetActive(true)
 			frame.trinketsTab:SetActive(false)
 			frame.debuffsTab:SetActive(false)
 			frame.consumablesTab:SetActive(false)
+			frame.raidNotesTab:SetActive(false)
 		end
 	end
 	frame.SetActivePane = SetActivePane
@@ -1292,6 +1355,7 @@ function C.CreateModal()
 	frame.trinketsTab:SetScript("OnClick", function() SetActivePane("trinkets") end)
 	frame.debuffsTab:SetScript("OnClick", function() SetActivePane("debuffs") end)
 	frame.consumablesTab:SetScript("OnClick", function() SetActivePane("consumables") end)
+	frame.raidNotesTab:SetScript("OnClick", function() SetActivePane("raidNotes") end)
 
 	local function UpdateTabVisibility()
 		if C.IsFeatureEnabled("trinkets") then
@@ -1316,6 +1380,7 @@ function C.CreateModal()
 			frame.consumablesTab:Hide()
 			if frame.activePane == "consumables" then SetActivePane("general") end
 		end
+		if C.IsFeatureEnabled("raidNotes") then frame.raidNotesTab:Show() else frame.raidNotesTab:Hide(); if frame.activePane == "raidNotes" then SetActivePane("general") end end
 	end
 	frame.UpdateTabVisibility = UpdateTabVisibility
 
@@ -1340,6 +1405,8 @@ function C.CreateModal()
 	frame.consumablesFeatureCheck = CreateFeatureCheckbox(gp, "consumables", -18, -150, function()
 		UpdateTabVisibility()
 	end)
+	CreateLabel(gp, "MRT Raid Notes", 28, -182)
+	frame.raidNotesFeatureCheck = CreateFeatureCheckbox(gp, "raidNotes", -18, -176)
 
 	-- Trinkets pane
 	local tp = frame.trinketsPane
@@ -1426,6 +1493,17 @@ function C.CreateModal()
 	frame.consumableLockedCheck = CreateSettingCheckbox(cp, "consumableLocked", -18, -112)
 	CreateLabel(cp, "Show only in raid", 16, -148)
 	frame.consumableRaidOnlyCheck = CreateSettingCheckbox(cp, "consumableRaidOnly", -18, -142)
+
+	-- MRT Raid Notes pane
+	local rp = frame.raidNotesPane
+	CreateSectionHeader(rp, "Buttons", 16, -12)
+	CreateLabel(rp, "Font size", 16, -38); frame.raidNotesFontSizeSlider = CreateRangeSlider(rp, "raidNotesFontSize", -18, -40, 142, 8, 32, "px")
+	CreateLabel(rp, "Inner padding", 16, -74); frame.raidNotesPaddingSlider = CreateRangeSlider(rp, "raidNotesPadding", -18, -76, 142, 0, 20, "px")
+	CreateLabel(rp, "Button gap", 16, -110); frame.raidNotesGapSlider = CreateRangeSlider(rp, "raidNotesGap", -18, -112, 142, 0, 20, "px")
+	CreateLabel(rp, "Border width", 16, -146); frame.raidNotesBorderWidthSlider = CreateRangeSlider(rp, "raidNotesBorderWidth", -18, -148, 142, 0, 8, "px")
+	CreateLabel(rp, "Background color", 16, -190); frame.raidNotesBackgroundColorButton = CreateColorButton(rp, "raidNotesBackgroundColor", -18, -184)
+	CreateLabel(rp, "Border color", 16, -222); frame.raidNotesBorderColorButton = CreateColorButton(rp, "raidNotesBorderColor", -18, -216)
+	CreateLabel(rp, "Locked", 16, -258); frame.raidNotesLockedCheck = CreateSettingCheckbox(rp, "raidNotesLocked", -18, -252)
 
 	SetActivePane("general")
 	UpdateTabVisibility()
