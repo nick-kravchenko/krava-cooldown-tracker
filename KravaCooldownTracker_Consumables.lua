@@ -60,6 +60,9 @@ K.ITEMS = {
 	food_crit = item("Skullfish Soup", 33825, 43763, { 43764 }, "food", WOWHEAD .. "33825", { outOfCombatOnly = true }),
 	food_hit = item("Dark Desire", 22237, 27723, { 27723 }, "food", WOWHEAD .. "22237", { outOfCombatOnly = true }),
 
+	food_pet_kibler = item("Kibler's Bits", 33874, 43771, { 43771 }, "food", WOWHEAD .. "33874", { target = "pet", outOfCombatOnly = true }),
+	food_pet_sporeling = item("Sporeling Snack", 27656, 33272, { 33272 }, "food", WOWHEAD .. "27656", { target = "pet", outOfCombatOnly = true }),
+
 	scroll_agility = item("Scroll of Agility V", 27498, 33077, { 33077 }, "scroll", WOWHEAD .. "27498"),
 	scroll_strength = item("Scroll of Strength V", 27503, 33082, { 33082 }, "scroll", WOWHEAD .. "27503"),
 	scroll_protection = item("Scroll of Protection V", 27500, 33079, { 33079 }, "scroll", WOWHEAD .. "27500"),
@@ -99,6 +102,7 @@ local G = {
 	strengthFood = group("food", "food", { "food_strength" }),
 	staminaFood = group("food", "food", { "food_stamina", "food_stamina_crawdad" }),
 	healingFood = group("food", "food", { "food_healing", "food_crit" }),
+	petFood = group("pet_food", "food", { "food_pet_kibler", "food_pet_sporeling" }, { requiresPet = true }),
 	wizardOil = group("mainhand", "weapon", { "oil_brilliant_wizard", "oil_superior_wizard" }),
 	manaOil = group("mainhand", "weapon", { "oil_brilliant_mana", "oil_superior_wizard" }),
 	stone = group("weapon", "weapon", { "stone_adamantite_sharp", "stone_adamantite_weight" }, { perEquippedWeapon = true }),
@@ -120,7 +124,7 @@ K.PROFILES = {
 		[2] = profile(G.assault, G.agilityBattle, G.wisdomGuardian, G.agilityFood, G.stone, G.agilityScroll, G.strengthScroll),
 		[3] = profile(G.healingFlask, G.healingBattle, G.wisdomGuardian, G.healingFood, G.manaOil, G.spiritScroll, G.protectionScroll),
 	},
-	HUNTER = { default = profile(G.assault, G.agilityBattle, G.wisdomGuardian, G.agilityFood, G.stone, G.agilityScroll, G.strengthScroll) },
+	HUNTER = { default = profile(G.petFood, G.assault, G.agilityBattle, G.wisdomGuardian, G.agilityFood, G.stone, G.agilityScroll, G.strengthScroll) },
 	MAGE = {
 		[1] = profile(G.blinding, G.casterBattle, G.wisdomGuardian, G.spellFood, G.wizardOil, G.spiritScroll, G.protectionScroll),
 		[2] = profile(G.pureDeath, G.fireBattle, G.wisdomGuardian, G.spellFood, G.wizardOil, G.spiritScroll, G.protectionScroll),
@@ -142,7 +146,7 @@ K.PROFILES = {
 		[2] = profile(G.assault, G.physicalBattle, G.wisdomGuardian, G.strengthFood),
 		[3] = profile(G.healingFlask, G.healingBattle, G.wisdomGuardian, G.healingFood, G.manaOil),
 	},
-	WARLOCK = { default = profile(G.pureDeath, G.shadowBattle, G.fireBattle, G.wisdomGuardian, G.spellFood, G.wizardOil) },
+	WARLOCK = { default = profile(G.petFood, G.pureDeath, G.shadowBattle, G.fireBattle, G.wisdomGuardian, G.spellFood, G.wizardOil) },
 	WARRIOR = {
 		[1] = profile(G.assault, G.physicalBattle, G.wisdomGuardian, G.strengthFood, G.offhandStone, G.agilityScroll, G.strengthScroll, G.protectionScroll),
 		[2] = profile(G.assault, G.physicalBattle, G.wisdomGuardian, G.strengthFood, G.offhandStone, G.agilityScroll, G.strengthScroll, G.protectionScroll),
