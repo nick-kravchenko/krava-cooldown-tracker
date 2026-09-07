@@ -56,7 +56,7 @@ K.ITEMS = {
 	food_strength = item("Roasted Clefthoof", 27658, 33260, { 33256 }, "food", WOWHEAD .. "27658", { outOfCombatOnly = true }),
 	food_stamina = item("Fisherman's Feast", 33052, 33258, { 33257 }, "food", WOWHEAD .. "33052", { outOfCombatOnly = true }),
 	food_stamina_crawdad = item("Spicy Crawdad", 27667, 33258, { 33257 }, "food", WOWHEAD .. "27667", { outOfCombatOnly = true }),
-	food_healing = item("Golden Fish Sticks", 27666, 33268, { 33265 }, "food", WOWHEAD .. "27666", { outOfCombatOnly = true }),
+	food_healing = item("Golden Fish Sticks", 27666, 33269, { 33268 }, "food", WOWHEAD .. "27666", { outOfCombatOnly = true }),
 	food_crit = item("Skullfish Soup", 33825, 43763, { 43764 }, "food", WOWHEAD .. "33825", { outOfCombatOnly = true }),
 	food_hit = item("Dark Desire", 22237, 27723, { 27723 }, "food", WOWHEAD .. "22237", { outOfCombatOnly = true }),
 

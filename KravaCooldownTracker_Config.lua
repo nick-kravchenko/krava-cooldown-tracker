@@ -46,6 +46,10 @@ local DEFAULT_RAID_NOTES_FONT_SIZE = 12
 local DEFAULT_RAID_NOTES_PADDING = 6
 local DEFAULT_RAID_NOTES_GAP = 2
 local DEFAULT_RAID_NOTES_BORDER_WIDTH = 1
+local RAID_NOTES_STRATA = {
+	"BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG",
+	"FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP",
+}
 local DROPDOWN_ROW_HEIGHT = 24
 local MAX_DROPDOWN_ROWS = 7
 
@@ -258,6 +262,11 @@ function C.Normalize()
 	cfg.debuffDirection = NormalizeDebuffDirection(cfg.debuffDirection)
 	cfg.consumableIconSize = ClampNumber(cfg.consumableIconSize, MIN_CONSUMABLE_ICON_SIZE, MAX_CONSUMABLE_ICON_SIZE, DEFAULT_CONSUMABLE_ICON_SIZE)
 	cfg.consumableFontSize = ClampNumber(cfg.consumableFontSize, MIN_CONSUMABLE_FONT_SIZE, MAX_CONSUMABLE_FONT_SIZE, DEFAULT_CONSUMABLE_FONT_SIZE)
+	local validRaidNotesStrata = false
+	for _, strata in ipairs(RAID_NOTES_STRATA) do
+		if cfg.raidNotesStrata == strata then validRaidNotesStrata = true; break end
+	end
+	if not validRaidNotesStrata then cfg.raidNotesStrata = "DIALOG" end
 	cfg.raidNotesFontSize = ClampNumber(cfg.raidNotesFontSize, 8, 32, DEFAULT_RAID_NOTES_FONT_SIZE)
 	cfg.raidNotesPadding = ClampNumber(cfg.raidNotesPadding, 0, 20, DEFAULT_RAID_NOTES_PADDING)
 	cfg.raidNotesGap = ClampNumber(cfg.raidNotesGap, 0, 20, DEFAULT_RAID_NOTES_GAP)
@@ -541,6 +550,7 @@ local function RefreshModalValues(frame)
 	if frame.raidNotesPaddingSlider then frame.raidNotesPaddingSlider:SetValue(cfg.raidNotesPadding) end
 	if frame.raidNotesGapSlider then frame.raidNotesGapSlider:SetValue(cfg.raidNotesGap) end
 	if frame.raidNotesBorderWidthSlider then frame.raidNotesBorderWidthSlider:SetValue(cfg.raidNotesBorderWidth) end
+	if frame.raidNotesStrataDropdown then frame.raidNotesStrataDropdown:Refresh(cfg) end
 	if frame.raidNotesLockedCheck then frame.raidNotesLockedCheck:SetChecked(cfg.raidNotesLocked) end
 	if frame.raidNotesBackgroundColorButton then frame.raidNotesBackgroundColorButton:Refresh() end
 	if frame.raidNotesBorderColorButton then frame.raidNotesBorderColorButton:Refresh() end
@@ -864,6 +874,87 @@ local function CreateDebuffDirectionDropdown(parent, x, y)
 		self.text:SetText(label)
 		for _, row in ipairs(menu.rows) do
 			if row.option.value == cfg.debuffDirection then
+				row.text:SetTextColor(1, 0.82, 0, 1)
+			else
+				row.text:SetTextColor(1, 1, 1, 1)
+			end
+		end
+	end
+
+	dropdown:SetScript("OnClick", function()
+		if menu:IsShown() then
+			menu:Hide()
+		else
+			dropdown:Refresh(C.Get())
+			menu:Show()
+		end
+	end)
+
+	return dropdown
+end
+
+local function CreateRaidNotesStrataDropdown(parent, x, y)
+	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
+	local dropdown = CreateFrame("Button", "KravaCooldownTrackerRaidNotesStrataDropdown", parent, backdropTemplate)
+	dropdown:SetSize(172, 22)
+	dropdown:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
+	StyleDropdownButton(dropdown)
+
+	dropdown.text = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
+	dropdown.text:SetPoint("RIGHT", dropdown, "RIGHT", -24, 0)
+	dropdown.text:SetJustifyH("LEFT")
+	C.RegisterFontString(dropdown.text)
+
+	dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dropdown.arrow:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
+	dropdown.arrow:SetText("v")
+	C.RegisterFontString(dropdown.arrow)
+
+	local options = {}
+	for _, strata in ipairs(RAID_NOTES_STRATA) do
+		options[#options + 1] = { label = strata, value = strata }
+	end
+
+	local menu = CreateFrame("Frame", "KravaCooldownTrackerRaidNotesStrataMenu", dropdown, backdropTemplate)
+	menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+	menu:SetSize(172, (#options * DROPDOWN_ROW_HEIGHT) + 4)
+	menu:SetFrameStrata("DIALOG")
+	menu:SetFrameLevel(dropdown:GetFrameLevel() + 10)
+	menu.rows = {}
+	StylePanel(menu)
+	menu:Hide()
+	dropdown.menu = menu
+
+	local function SelectStrata(value)
+		SetAndRefresh("raidNotesStrata", value)
+		dropdown:Refresh(C.Get())
+		menu:Hide()
+	end
+
+	for index, option in ipairs(options) do
+		local row = CreateFrame("Button", nil, menu)
+		row:SetSize(168, DROPDOWN_ROW_HEIGHT)
+		row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -2 - ((index - 1) * DROPDOWN_ROW_HEIGHT))
+		row.option = option
+		row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		row.text:SetPoint("LEFT", row, "LEFT", 7, 0)
+		row.text:SetPoint("RIGHT", row, "RIGHT", -7, 0)
+		row.text:SetJustifyH("LEFT")
+		row.text:SetText(option.label)
+		C.RegisterFontString(row.text)
+		row:SetScript("OnClick", function(self)
+			SelectStrata(self.option.value)
+		end)
+		menu.rows[index] = row
+	end
+
+	function dropdown:Refresh(cfg)
+		cfg = cfg or C.Get()
+		local label = cfg.raidNotesStrata
+		self.text:SetText(label)
+		for _, row in ipairs(menu.rows) do
+			if row.option.value == cfg.raidNotesStrata then
 				row.text:SetTextColor(1, 0.82, 0, 1)
 			else
 				row.text:SetTextColor(1, 1, 1, 1)
@@ -1493,6 +1584,19 @@ function C.CreateModal()
 	frame.consumableLockedCheck = CreateSettingCheckbox(cp, "consumableLocked", -18, -112)
 	CreateLabel(cp, "Show only in raid", 16, -148)
 	frame.consumableRaidOnlyCheck = CreateSettingCheckbox(cp, "consumableRaidOnly", -18, -142)
+	frame.consumableSpecLabel = CreateLabel(cp, "Spec detected as: Unknown", 16, -184)
+	local function RefreshDetectedSpec()
+		local logic = KravaCooldownTracker_ConsumableLogic
+		local detected = logic and logic.GetDetectedSpecLabel and logic.GetDetectedSpecLabel() or "Unknown"
+		frame.consumableSpecLabel:SetText("Spec detected as: " .. detected)
+	end
+	cp:SetScript("OnShow", RefreshDetectedSpec)
+	for _, event in ipairs({ "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED" }) do
+		cp:RegisterEvent(event)
+	end
+	cp:SetScript("OnEvent", function(self)
+		if self:IsShown() then RefreshDetectedSpec() end
+	end)
 
 	-- MRT Raid Notes pane
 	local rp = frame.raidNotesPane
@@ -1504,6 +1608,7 @@ function C.CreateModal()
 	CreateLabel(rp, "Background color", 16, -190); frame.raidNotesBackgroundColorButton = CreateColorButton(rp, "raidNotesBackgroundColor", -18, -184)
 	CreateLabel(rp, "Border color", 16, -222); frame.raidNotesBorderColorButton = CreateColorButton(rp, "raidNotesBorderColor", -18, -216)
 	CreateLabel(rp, "Locked", 16, -258); frame.raidNotesLockedCheck = CreateSettingCheckbox(rp, "raidNotesLocked", -18, -252)
+	CreateLabel(rp, "Frame strata", 16, -294); frame.raidNotesStrataDropdown = CreateRaidNotesStrataDropdown(rp, -18, -288)
 
 	SetActivePane("general")
 	UpdateTabVisibility()

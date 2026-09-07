@@ -106,6 +106,7 @@ function R.Refresh(force)
 	if not force and signature == lastSignature then return end
 	lastSignature = signature
 	local cfg = getConfig()
+	frame:SetFrameStrata(cfg.raidNotesStrata or "DIALOG")
 	local padding, gap = cfg.raidNotesPadding or 6, cfg.raidNotesGap or 2
 	local fontSize = cfg.raidNotesFontSize or 12
 	local width, height = CONTENT_WIDTH + padding * 2, fontSize + padding * 2
@@ -145,7 +146,7 @@ end
 function R.Initialize()
 	if frame then return end
 	frame = CreateFrame("Frame", "KravaCooldownTrackerRaidNotes", UIParent)
-	frame:SetFrameStrata("DIALOG")
+	frame:SetFrameStrata(getConfig().raidNotesStrata or "DIALOG")
 	frame:SetMovable(true)
 	frame:SetClampedToScreen(true)
 	restorePosition()

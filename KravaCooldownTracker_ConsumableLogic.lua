@@ -57,7 +57,18 @@ function L.Evaluate(profile, state, catalog)
 		end
 	end
 	for _, group in ipairs(profile or {}) do
-		if group.perEquippedWeapon then
+		local eatingKey
+		if group.category == "food" and not group.requiresPet and not state.inCombat then
+			for _, key in ipairs(group.choices) do
+				if state.eating and state.eating[key] then
+					eatingKey = eatingKey or key
+					if (state.bagCounts and state.bagCounts[catalog[key].itemId] or 0) > 0 then eatingKey = key; break end
+				end
+			end
+		end
+		if eatingKey then
+			reminders[#reminders + 1] = { group = group, itemKey = eatingKey, item = catalog[eatingKey] }
+		elseif group.perEquippedWeapon then
 			for _, target in ipairs({ "mainhand", "offhand" }) do
 				if state.equippedWeapons and state.equippedWeapons[target] then
 					local satisfied = false
@@ -125,26 +136,50 @@ local function inCombat()
 end
 
 function L.GetSpecIndex()
-	if GetPrimaryTalentTree then
-		local index = GetPrimaryTalentTree()
-		if index and index > 0 then return index end
+	-- Anniversary's GetPrimaryTalentTree compatibility shim can always return 1.
+	-- Select the tree with the most spent points in the active talent group.
+	local specAPI = C_SpecializationInfo
+	local activeGroup
+	if specAPI and specAPI.GetActiveSpecGroup then
+		activeGroup = specAPI.GetActiveSpecGroup()
+	elseif GetActiveTalentGroup then
+		activeGroup = GetActiveTalentGroup()
+	end
+	local numTabs = GetNumTalentTabs and GetNumTalentTabs(false, false)
+	if not numTabs and specAPI and specAPI.GetNumSpecializations then
+		numTabs = specAPI.GetNumSpecializations()
 	end
 	local bestIndex, bestPoints = 1, -1
-	if C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializations and C_SpecializationInfo.GetSpecializationInfo then
-		for index = 1, C_SpecializationInfo.GetNumSpecializations() do
-			local _, _, _, _, _, _, points = C_SpecializationInfo.GetSpecializationInfo(index)
-			if type(points) == "number" and points > bestPoints then bestIndex, bestPoints = index, points end
+	for index = 1, numTabs or 3 do
+		local points
+		if specAPI and specAPI.GetSpecializationInfo then
+			local _, _, _, _, _, _, spent = specAPI.GetSpecializationInfo(index, false, false, nil, nil, activeGroup)
+			points = spent
 		end
-		if bestPoints >= 0 then return bestIndex end
-	end
-	if GetNumTalentTabs and GetTalentTabInfo then
-		for index = 1, GetNumTalentTabs() do
-			local _, _, legacyPoints, _, points = GetTalentTabInfo(index)
-			points = type(points) == "number" and points or type(legacyPoints) == "number" and legacyPoints or 0
-			if (points or 0) > bestPoints then bestIndex, bestPoints = index, points or 0 end
+		if type(points) ~= "number" and GetTalentTabInfo then
+			local _, _, legacyPoints, _, spent = GetTalentTabInfo(index, false, false, activeGroup)
+			points = type(spent) == "number" and spent or legacyPoints
+		end
+		if type(points) == "number" and points > bestPoints then
+			bestIndex, bestPoints = index, points
 		end
 	end
 	return bestIndex
+end
+
+function L.GetDetectedSpecLabel()
+	local className = UnitClass("player") or "Unknown class"
+	local index = L.GetSpecIndex()
+	local specName
+	if C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo then
+		local _, name = C_SpecializationInfo.GetSpecializationInfo(index)
+		specName = name
+	end
+	if not specName and GetTalentTabInfo then
+		local first, second = GetTalentTabInfo(index)
+		specName = type(first) == "string" and first or second
+	end
+	return className .. " " .. (specName or ("Unknown spec (" .. index .. ")"))
 end
 
 local function collectAuras(unit)
@@ -184,8 +219,37 @@ local function linkContainsEnchant(slot, enchantId)
 	return link and link:find(":" .. tostring(enchantId) .. ":", 1, true) ~= nil or false
 end
 
+function L.GetEatingAura(item)
+	if item.category ~= "food" or item.target == "pet" then return nil end
+	local spellId = item.effectSpellId
+	local getItemSpell = C_Item and C_Item.GetItemSpell or GetItemSpell
+	if getItemSpell then
+		local _, id = getItemSpell(item.itemId)
+		spellId = id or spellId
+	end
+	local aura = Helpers.GetPlayerAuraBySpellId(spellId)
+	if aura and (aura.duration or 0) > 0 and aura.duration <= 60
+		and (aura.expirationTime or 0) > GetTime() then return aura end
+end
+
+function L.GetIconTimer(item)
+	local aura = L.GetEatingAura(item)
+	if aura then return aura.expirationTime - aura.duration, aura.duration, "food" end
+	if item.category == "flask" or item.category == "battle" or item.category == "guardian" then
+		local getCooldown = C_Container and C_Container.GetItemCooldown or GetItemCooldown
+		if getCooldown then
+			local start, duration, enabled = getCooldown(item.itemId)
+			if enabled ~= 0 and start and duration and duration > 0 and start + duration > GetTime() then
+				return start, duration, "cooldown"
+			end
+		end
+	end
+	return 0, 0
+end
+
 local function collectState()
 	local state = {
+		eating = {},
 		playerAuras = collectAuras("player"),
 		petAuras = collectAuras("pet"),
 		petAvailable = UnitExists("pet") and not UnitIsDeadOrGhost("pet"),
@@ -198,7 +262,8 @@ local function collectState()
 		equipmentEnchants = {},
 		inCombat = UnitAffectingCombat("player") and true or false,
 	}
-	for _, item in pairs(Catalog.ITEMS) do
+	for key, item in pairs(Catalog.ITEMS) do
+		if L.GetEatingAura(item) then state.eating[key] = true end
 		if item.inventorySlot and item.enchantId and linkContainsEnchant(item.inventorySlot, item.enchantId) then
 			state.equipmentEnchants[item.inventorySlot] = item.enchantId
 		end
@@ -260,6 +325,20 @@ local function makeHandle(side)
 	return handle
 end
 
+local function updateButtonTimer(button)
+	if not button.item then return end
+	local start, duration, kind = L.GetIconTimer(button.item)
+	if start ~= button.timerStart or duration ~= button.timerDuration then
+		button.cooldown:SetCooldown(start, duration)
+		button.timerStart, button.timerDuration = start, duration
+	end
+	local remaining = start + duration - GetTime()
+	button.timeText:SetText(duration > 0 and Helpers.FormatTimeLeft(math.max(0, remaining)) or "")
+	button.timeText:SetTextColor(kind == "food" and 0.3 or 1, 1, kind == "food" and 0.3 or 1)
+	if button.wasEating and kind ~= "food" then L.ScheduleRefresh() end
+	button.wasEating = kind == "food"
+end
+
 local function configureButton(button, reminder, size, index, cfg)
 	local item = reminder.item
 	local target = reminder.target or item.target
@@ -268,6 +347,9 @@ local function configureButton(button, reminder, size, index, cfg)
 	button:SetPoint("LEFT", frame, "LEFT", (index - 1) * size, 0)
 	button.icon:SetTexture(Helpers.GetItemIcon(item.itemId))
 	button.itemId = item.itemId
+	button.item = item
+	button.timeText:SetFont(cfg.fontFace or STANDARD_TEXT_FONT, cfg.consumableFontSize or 14, "OUTLINE")
+	updateButtonTimer(button)
 	button.label:SetText(target == "mainhand" and "MH" or target == "offhand" and "OH" or target == "chest" and "CHEST" or target == "pet" and "PET" or "")
 	button.label:SetFont(cfg.fontFace or STANDARD_TEXT_FONT, cfg.consumableFontSize or 14, "OUTLINE")
 	if not inCombat() then
@@ -332,6 +414,20 @@ local function createButton(index)
 	button.icon = button:CreateTexture(nil, "ARTWORK")
 	button.icon:SetAllPoints()
 	button.icon:SetTexCoord(Helpers.CROP, 1 - Helpers.CROP, Helpers.CROP, 1 - Helpers.CROP)
+	button.cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+	button.cooldown:SetAllPoints()
+	button.cooldown:SetHideCountdownNumbers(true)
+	button.timerOverlay = CreateFrame("Frame", nil, button)
+	button.timerOverlay:SetAllPoints()
+	button.timerOverlay:SetFrameLevel(button.cooldown:GetFrameLevel() + 1)
+	button.timeText = button.timerOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	button.timeText:SetPoint("CENTER", button, "CENTER", 0, 0)
+	button:SetScript("OnUpdate", function(self, elapsed)
+		self.timerElapsed = (self.timerElapsed or 0) + elapsed
+		if self.timerElapsed < 0.1 then return end
+		self.timerElapsed = 0
+		updateButtonTimer(self)
+	end)
 	button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	button.label:SetPoint("CENTER", button, "CENTER", 0, 0)
 	button:SetScript("OnEnter", function(self)
@@ -373,7 +469,7 @@ end
 
 if CreateFrame then
 	local events = CreateFrame("Frame")
-	for _, event in ipairs({ "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED", "UNIT_AURA", "UNIT_PET", "UNIT_HEALTH", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
+	for _, event in ipairs({ "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "BAG_UPDATE_DELAYED", "BAG_UPDATE_COOLDOWN", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED", "UNIT_AURA", "UNIT_PET", "UNIT_HEALTH", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
 		pcall(events.RegisterEvent, events, event)
 	end
 	events:SetScript("OnEvent", function(_, event, unit)

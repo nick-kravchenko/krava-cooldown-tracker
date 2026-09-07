@@ -16,8 +16,8 @@ KravaCooldownTracker_TrinketCfg = {
 	-- =========================
 
 	-- 28830 Dragonspine Trophy
-	-- Proc buff: 34775 "Dragonspine Flurry" (10s), ICD ~20s
-	[28830] = { kind = "proc",  buffSpellIds = { 34775 }, icd = 20 },
+	-- Proc buff: 34775 "Dragonspine Flurry" (10s)
+	[28830] = { kind = "proc",  buffSpellIds = { 34775 } },
 
 	-- 21670 Badge of the Swarmguard (AQ40)
 	[21670] = { kind = "active", buffSpellIds = { 26480 } },
@@ -61,7 +61,7 @@ KravaCooldownTracker_TrinketCfg = {
 	[30627] = { kind = "proc", buffSpellIds = { 42084 }, icd = 45 },
 
 	-- 32505 Madness of the Betrayer (proc)
-	[32505] = { kind = "proc", buffSpellIds = { 40477 }, icd = 45 },
+	[32505] = { kind = "proc", buffSpellIds = { 40477 } },
 
 	-- 33831 Berserker's Call (on-use AP)
 	[33831] = { kind = "active", buffSpellIds = { 43716 } },
