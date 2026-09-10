@@ -442,7 +442,7 @@ local function ConfigureSuggestionButton(slotId, index, item)
 end
 
 function T.UpdateSuggestion(slotId)
-	if not T.featureEnabled then
+	if not T.featureEnabled or AreSuggestionsDisabledForSlot(slotId) then
 		if T.suggestion[slotId] then T.suggestion[slotId]:Hide() end
 		return
 	end

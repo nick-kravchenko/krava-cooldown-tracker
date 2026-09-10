@@ -12,6 +12,7 @@ KravaCooldownTracker_Consumables.lua
 KravaCooldownTracker_Helpers.lua
 KravaCooldownTracker_Config.lua
 KravaCooldownTracker_ConfigTransfer.lua
+KravaCooldownTracker_Benchmark.lua
 KravaCooldownTracker_TrinketLogic.lua
 KravaCooldownTracker_DebuffLogic.lua
 KravaCooldownTracker_ConsumableLogic.lua

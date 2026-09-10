@@ -237,6 +237,8 @@ function C.PlaySuggestionAvailableSound(value)
 	end
 end
 
+local normalizedConfig
+
 function C.Normalize()
 	local cfg = EnsureDB()
 
@@ -331,11 +333,14 @@ function C.Normalize()
 		cfg.trinketSuggestionBlacklist = {}
 	end
 
+	normalizedConfig = cfg
 	return cfg
 end
 
 function C.Get()
-	return C.Normalize()
+	local cfg = EnsureDB()
+	if cfg ~= normalizedConfig then return C.Normalize() end
+	return cfg
 end
 
 function C.Set(key, value)
@@ -1559,6 +1564,12 @@ function C.CreateModal()
 		if ok then transferText:ClearFocus(); RefreshModalValues(frame) end
 	end)
 
+	local benchmarkButton = CreateFrame("Button", nil, gp, "UIPanelButtonTemplate")
+	benchmarkButton:SetSize(150, 24)
+	benchmarkButton:SetPoint("TOPLEFT", gp, "TOPLEFT", 16, -522)
+	benchmarkButton:SetText("Benchmark")
+	benchmarkButton:SetScript("OnClick", function() KravaCooldownTracker_Benchmark.Toggle() end)
+
 	-- Trinkets pane
 	local tp = frame.trinketsPane
 	CreateLabel(tp, "Locked", 16, -12)
@@ -1701,6 +1712,10 @@ end
 
 SLASH_KRAVACOOLDOWNTRACKER1 = "/kct"
 SlashCmdList = SlashCmdList or {}
-SlashCmdList.KRAVACOOLDOWNTRACKER = function()
+SlashCmdList.KRAVACOOLDOWNTRACKER = function(message)
+	if type(message) == "string" and message:lower():match("^%s*benchmark%s*$") then
+		KravaCooldownTracker_Benchmark.Toggle()
+		return
+	end
 	C.ToggleModal()
 end

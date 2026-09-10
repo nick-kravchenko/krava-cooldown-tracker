@@ -233,3 +233,7 @@ If the trinket effect does not create a player buff, omit `buffSpellIds`. The ad
 ### Export and import
 
 Open `/kct config` and use **Export / Import** in General. Click **Export**, then press Ctrl+C to copy the selected string. To restore or share a setup, paste the string into the text box and click **Import**. Import replaces settings and this character’s suggestion exclusions, and includes saved feature positions. Settings and positions apply immediately without reloading the UI. Invalid strings are rejected without changing settings; importing is unavailable during combat.
+
+### Resource benchmark
+
+Open **Benchmark** in `/kct config` → General, or run `/kct benchmark`. The movable window shows KCT memory in KB/MB and Blizzard profiler CPU metrics: recent average, session average, session peak, and share of total addon CPU. CPU timings are milliseconds per frame, not operating-system CPU utilization. The window refreshes every two seconds while visible and closes with Escape. CPU values show as unavailable if the client does not expose an enabled addon profiler. The monitor does not change profiling settings, reset statistics, or force garbage collection.
