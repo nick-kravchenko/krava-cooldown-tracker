@@ -18,7 +18,7 @@ This targets the Classic Era/Anniversary client interface version used by the lo
 
 - Shows both player trinket slots, inventory slots `13` and `14`.
 - Hover a trinket slot to open a vertical dropdown of trinkets found in bags `0` through `4`.
-- Maintains separate per-item blacklists for the bag dropdown and automatic suggestions.
+- Maintains separate per-item blacklists for the bag dropdown and automatic suggestions. Suggestion exclusions are saved per character; existing account-wide exclusions are copied when each character first uses the new storage.
 - Click a dropdown trinket to equip it into that slot.
 - Queues a requested trinket swap while in combat, then attempts the swap when combat ends.
 - Displays item cooldowns on equipped trinkets and bag-dropdown trinkets.
@@ -229,3 +229,7 @@ If the trinket effect does not create a player buff, omit `buffSpellIds`. The ad
 - The debuff tracker only follows your current `target`; it does not track focus, arena, or nameplate units.
 - The tracked debuff list is fixed and cannot be extended with custom spell IDs; debuffs can only be toggled on or off.
 - Debuffs are matched by aura name, so same-named auras from any source will light up the icon regardless of who applied them.
+
+### Export and import
+
+Open `/kct config` and use **Export / Import** in General. Click **Export**, then press Ctrl+C to copy the selected string. To restore or share a setup, paste the string into the text box and click **Import**. Import replaces settings and this character’s suggestion exclusions, and includes saved feature positions. Settings and positions apply immediately without reloading the UI. Invalid strings are rejected without changing settings; importing is unavailable during combat.

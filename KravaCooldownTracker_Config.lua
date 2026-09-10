@@ -394,8 +394,15 @@ function C.SetRefreshCallback(callback)
 end
 
 function C.RefreshChanged()
+	local cfg = C.Get()
+	if C.modal then
+		for _, key in ipairs({ "locked", "debuffLocked", "consumableLocked", "raidNotesLocked" }) do
+			local check = C.modal[key .. "Check"]
+			if check then check:SetChecked(cfg[key]) end
+		end
+	end
 	if C.refreshCallback then
-		C.refreshCallback(C.Get())
+		C.refreshCallback(cfg)
 	end
 end
 
@@ -506,6 +513,7 @@ local function RefreshModalValues(frame)
 	if frame.queueIconPercentSlider then frame.queueIconPercentSlider:SetValue(cfg.queueIconPercent) end
 	if frame.fontSizeSlider then frame.fontSizeSlider:SetValue(cfg.fontSize) end
 	if frame.lockedCheck then frame.lockedCheck:SetChecked(cfg.locked) end
+	if frame.debuffLockedCheck then frame.debuffLockedCheck:SetChecked(cfg.debuffLocked) end
 	if frame.disableTrinketUsageCheck then frame.disableTrinketUsageCheck:SetChecked(cfg.disableTrinketUsageOnClick) end
 	if frame.disableUpperTrinketSuggestionsCheck then frame.disableUpperTrinketSuggestionsCheck:SetChecked(cfg.disableUpperTrinketSuggestions) end
 	if frame.disableLowerTrinketSuggestionsCheck then frame.disableLowerTrinketSuggestionsCheck:SetChecked(cfg.disableLowerTrinketSuggestions) end
@@ -572,13 +580,27 @@ local function RefreshModalValues(frame)
 	C.ApplyModalFont()
 end
 
+function C.GetTrinketBlacklist(kind)
+	local cfg = C.Get()
+	if kind == "dropdown" then return cfg.trinketDropdownBlacklist end
+	if kind ~= "suggestion" then return {} end
+	KravaCooldownTrackerCharacterDB = KravaCooldownTrackerCharacterDB or {}
+	local db = KravaCooldownTrackerCharacterDB
+	if type(db.trinketSuggestionBlacklist) ~= "table" then
+		-- Keep the legacy account list as a migration seed, never a shared table.
+		db.trinketSuggestionBlacklist = {}
+		for itemId, disabled in pairs(cfg.trinketSuggestionBlacklist) do
+			db.trinketSuggestionBlacklist[itemId] = disabled
+		end
+	end
+	return db.trinketSuggestionBlacklist
+end
+
 function C.SetTrinketBlacklisted(kind, itemId, disabled)
 	itemId = tonumber(itemId)
 	if not itemId then return end
-	local cfg = C.Get()
-	local key = kind == "dropdown" and "trinketDropdownBlacklist" or "trinketSuggestionBlacklist"
-	cfg[key][itemId] = disabled and true or nil
-	C.Set(key, cfg[key])
+	local blacklist = C.GetTrinketBlacklist(kind)
+	blacklist[itemId] = disabled and true or nil
 	C.RefreshChanged()
 	if C.modal and C.modal.RefreshTrinketBlacklistLists then
 		C.modal.RefreshTrinketBlacklistLists()
@@ -1327,7 +1349,9 @@ function C.CreateModal()
 
 	local backdropTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
 	local frame = CreateFrame("Frame", "KravaCooldownTrackerConfigModal", UIParent, backdropTemplate)
-	frame:SetSize(460, 620)
+	UISpecialFrames = UISpecialFrames or {}
+	table.insert(UISpecialFrames, "KravaCooldownTrackerConfigModal")
+	frame:SetSize(460, 650)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 	frame:SetFrameStrata("DIALOG")
 	frame:EnableMouse(true)
@@ -1477,11 +1501,8 @@ function C.CreateModal()
 
 	-- General pane
 	local gp = frame.generalPane
-	CreateLabel(gp, "Locked", 16, -12)
-	frame.lockedCheck = CreateSettingCheckbox(gp, "locked", -18, -6)
-
-	CreateLabel(gp, "Font", 16, -42)
-	frame.fontDropdown = CreateFontDropdown(gp, -18, -36)
+	CreateLabel(gp, "Font", 16, -12)
+	frame.fontDropdown = CreateFontDropdown(gp, -18, -6)
 
 	CreateSectionHeader(gp, "Features", 16, -78)
 	CreateLabel(gp, "Trinkets", 28, -104)
@@ -1499,41 +1520,82 @@ function C.CreateModal()
 	CreateLabel(gp, "MRT Raid Notes", 28, -182)
 	frame.raidNotesFeatureCheck = CreateFeatureCheckbox(gp, "raidNotes", -18, -176)
 
+	CreateSectionHeader(gp, "Export / Import", 16, -226)
+	CreateLabel(gp, "Includes settings, positions, and this character's exclusions.", 16, -252)
+	local transferBorder = CreateFrame("Frame", nil, gp, backdropTemplate)
+	transferBorder:SetPoint("TOPLEFT", gp, "TOPLEFT", 16, -276)
+	transferBorder:SetSize(420, 158)
+	StylePanel(transferBorder)
+	local transferScroll = CreateFrame("ScrollFrame", nil, transferBorder, "UIPanelScrollFrameTemplate")
+	transferScroll:SetPoint("TOPLEFT", gp, "TOPLEFT", 20, -280)
+	transferScroll:SetSize(394, 150)
+	local transferText = CreateFrame("EditBox", nil, transferScroll)
+	transferText:SetMultiLine(true)
+	transferText:SetAutoFocus(false)
+	transferText:SetFontObject(ChatFontNormal)
+	transferText:SetWidth(390)
+	transferText:SetHeight(150)
+	transferText:SetMaxLetters(100000)
+	transferText:SetScript("OnEscapePressed", function(self) self:ClearFocus(); frame:Hide() end)
+	transferScroll:SetScrollChild(transferText)
+	local transferStatus = CreateLabel(gp, "Import replaces settings. Paste an export, then click Import.", 16, -478)
+	local function TransferButton(label, x, onClick)
+		local button = CreateFrame("Button", nil, gp, "UIPanelButtonTemplate")
+		button:SetSize(110, 24)
+		button:SetPoint("TOPLEFT", gp, "TOPLEFT", x, -444)
+		button:SetText(label)
+		button:SetScript("OnClick", onClick)
+		return button
+	end
+	TransferButton("Export", 16, function()
+		transferText:SetText(C.ExportConfig())
+		transferText:SetFocus()
+		transferText:HighlightText()
+		transferStatus:SetText("Press Ctrl+C to copy your config.")
+	end)
+	TransferButton("Import", 136, function()
+		local ok, message = C.ImportConfig(transferText:GetText())
+		transferStatus:SetText(message)
+		if ok then transferText:ClearFocus(); RefreshModalValues(frame) end
+	end)
+
 	-- Trinkets pane
 	local tp = frame.trinketsPane
-	CreateLabel(tp, "Font size", 16, -12)
-	frame.fontSizeSlider = CreateRangeSlider(tp, "fontSize", -18, -14, 142, MIN_FONT_SIZE, MAX_FONT_SIZE, "px")
+	CreateLabel(tp, "Locked", 16, -12)
+	frame.lockedCheck = CreateSettingCheckbox(tp, "locked", -18, -6)
+	CreateLabel(tp, "Font size", 16, -42)
+	frame.fontSizeSlider = CreateRangeSlider(tp, "fontSize", -18, -44, 142, MIN_FONT_SIZE, MAX_FONT_SIZE, "px")
 
-	CreateSectionHeader(tp, "Main Icon", 16, -48)
+	CreateSectionHeader(tp, "Main Icon", 16, -78)
 
-	CreateLabel(tp, "Icon size", 16, -74)
-	frame.mainIconSizeSlider = CreateRangeSlider(tp, "mainIconSize", -18, -76, 142, MIN_MAIN_ICON_SIZE, MAX_MAIN_ICON_SIZE, "px")
+	CreateLabel(tp, "Icon size", 16, -104)
+	frame.mainIconSizeSlider = CreateRangeSlider(tp, "mainIconSize", -18, -106, 142, MIN_MAIN_ICON_SIZE, MAX_MAIN_ICON_SIZE, "px")
 
-	CreateLabel(tp, "Queue icon size", 16, -110)
-	frame.queueIconPercentSlider = CreateRangeSlider(tp, "queueIconPercent", -18, -112, 142, MIN_QUEUE_ICON_PERCENT, MAX_QUEUE_ICON_PERCENT, "%")
+	CreateLabel(tp, "Queue icon size", 16, -140)
+	frame.queueIconPercentSlider = CreateRangeSlider(tp, "queueIconPercent", -18, -142, 142, MIN_QUEUE_ICON_PERCENT, MAX_QUEUE_ICON_PERCENT, "%")
 
-	CreateLabel(tp, "Disable trinket usage on click", 16, -150)
-	frame.disableTrinketUsageCheck = CreateSettingCheckbox(tp, "disableTrinketUsageOnClick", -18, -144)
+	CreateLabel(tp, "Disable trinket usage on click", 16, -180)
+	frame.disableTrinketUsageCheck = CreateSettingCheckbox(tp, "disableTrinketUsageOnClick", -18, -174)
 
-	CreateSectionHeader(tp, "Suggestions", 16, -184)
+	CreateSectionHeader(tp, "Suggestions", 16, -214)
 
-	CreateLabel(tp, "Position", 16, -210)
-	frame.suggestionPositionDropdown = CreateSuggestionPositionDropdown(tp, -18, -204)
+	CreateLabel(tp, "Position", 16, -240)
+	frame.suggestionPositionDropdown = CreateSuggestionPositionDropdown(tp, -18, -234)
 
-	CreateLabel(tp, "Icon size", 16, -240)
-	frame.suggestionIconSizeSlider = CreateRangeSlider(tp, "suggestionIconSize", -18, -242, 142, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, "px")
+	CreateLabel(tp, "Icon size", 16, -270)
+	frame.suggestionIconSizeSlider = CreateRangeSlider(tp, "suggestionIconSize", -18, -272, 142, MIN_SUGGESTION_ICON_SIZE, MAX_SUGGESTION_ICON_SIZE, "px")
 
-	CreateLabel(tp, "Available sound", 16, -276)
-	frame.suggestionAvailableSoundDropdown = CreateSuggestionSoundDropdown(tp, -18, -270)
+	CreateLabel(tp, "Available sound", 16, -306)
+	frame.suggestionAvailableSoundDropdown = CreateSuggestionSoundDropdown(tp, -18, -300)
 
-	CreateLabel(tp, "Disable suggestions for upper trinket", 16, -316)
-	frame.disableUpperTrinketSuggestionsCheck = CreateSettingCheckbox(tp, "disableUpperTrinketSuggestions", -18, -310)
+	CreateLabel(tp, "Disable suggestions for upper trinket", 16, -346)
+	frame.disableUpperTrinketSuggestionsCheck = CreateSettingCheckbox(tp, "disableUpperTrinketSuggestions", -18, -340)
 
-	CreateLabel(tp, "Disable suggestions for lower trinket", 16, -342)
-	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(tp, "disableLowerTrinketSuggestions", -18, -336)
+	CreateLabel(tp, "Disable suggestions for lower trinket", 16, -372)
+	frame.disableLowerTrinketSuggestionsCheck = CreateSettingCheckbox(tp, "disableLowerTrinketSuggestions", -18, -366)
 
-	frame.dropdownBlacklistList = CreateTrinketBlacklistList(tp, "dropdown", "Dropdown trinkets", -370)
-	frame.suggestionBlacklistList = CreateTrinketBlacklistList(tp, "suggestion", "Suggestion trinkets", -466)
+	frame.dropdownBlacklistList = CreateTrinketBlacklistList(tp, "dropdown", "Dropdown trinkets", -400)
+	frame.suggestionBlacklistList = CreateTrinketBlacklistList(tp, "suggestion", "Suggestion trinkets", -496)
 	frame.RefreshTrinketBlacklistLists = function()
 		frame.dropdownBlacklistList:Refresh()
 		frame.suggestionBlacklistList:ClearAllPoints()
@@ -1572,6 +1634,9 @@ function C.CreateModal()
 			frame.debuffToggles[entry.key] = check
 		end
 	end
+
+	CreateLabel(dp, "Locked", 16, -358)
+	frame.debuffLockedCheck = CreateSettingCheckbox(dp, "debuffLocked", -18, -352)
 
 	-- Consumables pane
 	local cp = frame.consumablesPane

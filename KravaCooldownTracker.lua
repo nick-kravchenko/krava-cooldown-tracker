@@ -575,6 +575,9 @@ local function RefreshDebuffRows()
 	debuffContainerFrame:Show()
 
 	local visible = D.GetVisibleRows()
+	if #visible == 0 and not cfg.debuffLocked then
+		visible = D.DEBUFFS
+	end
 	local iconSize = D.ICON_SIZE
 
 	for i, entry in ipairs(visible) do
@@ -637,7 +640,11 @@ end
 -- Recompute only the cached timer text of active rows (no aura rescan).
 local function RefreshDebuffTimers()
 	if not debuffContainerFrame or not debuffContainerFrame:IsShown() then return end
+	local cfg = GetConfig()
 	local visible = D.GetVisibleRows()
+	if #visible == 0 and not cfg.debuffLocked then
+		visible = D.DEBUFFS
+	end
 	for i, entry in ipairs(visible) do
 		local row = debuffRows[i]
 		local state = D.rowState[entry.key]
@@ -662,6 +669,22 @@ local function RefreshAllDisplays()
 	RefreshDebuffDisplay()
 	if CL and CL.RefreshRuntime then CL.RefreshRuntime() end
 	if RN and RN.Refresh then RN.Refresh(true) end
+end
+
+if C then
+	function C.RestorePositions()
+		if H.InCombat() then return end
+		if containerFrame then
+			containerFrame:StopMovingOrSizing()
+			RestoreContainerPosition(containerFrame)
+		end
+		if debuffContainerFrame then
+			debuffContainerFrame:StopMovingOrSizing()
+			RestoreDebuffPosition(debuffContainerFrame)
+		end
+		if CL and CL.RestorePosition then CL.RestorePosition() end
+		if RN and RN.RestorePosition then RN.RestorePosition() end
+	end
 end
 
 KravaCooldownTracker_RefreshDisplay = RefreshAllDisplays

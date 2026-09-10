@@ -193,6 +193,7 @@ end
 
 local function GetBlacklist(kind)
 	local config = KravaCooldownTracker_Config
+	if config and config.GetTrinketBlacklist then return config.GetTrinketBlacklist(kind) end
 	local cfg = config and config.Get and config.Get()
 	if not cfg then return {} end
 	if kind == "dropdown" then return cfg.trinketDropdownBlacklist or {} end

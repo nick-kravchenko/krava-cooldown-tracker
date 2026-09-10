@@ -58,6 +58,7 @@ local function savePosition()
 end
 
 local function restorePosition()
+	frame:ClearAllPoints()
 	local pos = KravaCooldownTrackerDB.raidNotesPos
 	if pos and pos.point and pos.relPoint then
 		frame:SetPoint(pos.point, UIParent, pos.relPoint, pos.x or 0, pos.y or 0)
@@ -65,6 +66,14 @@ local function restorePosition()
 		frame:SetPoint("CENTER", UIParent, "CENTER", 220, 0)
 	end
 end
+
+function R.RestorePosition()
+	if not frame then return end
+	if InCombatLockdown and InCombatLockdown() then return end
+	frame:StopMovingOrSizing()
+	restorePosition()
+end
+
 
 local function toggleLock()
 	if InCombatLockdown and InCombatLockdown() then return end
@@ -90,7 +99,7 @@ local function getButton(slot)
 	button.highlight:SetVertexColor(1, 1, 1, 0.12)
 	button:SetHighlightTexture(button.highlight)
 	button:SetScript("OnClick", function(self, mouseButton)
-		if mouseButton == "RightButton" then toggleLock() else sendNote(self.noteIndex) end
+		if mouseButton == "RightButton" then toggleLock() elseif self.noteIndex then sendNote(self.noteIndex) end
 	end)
 	buttons[slot] = button
 	return button
@@ -100,6 +109,9 @@ function R.Refresh(force)
 	if not frame then return end
 	if not isEnabled() then frame:Hide(); return end
 	local notes = getSortedNotes()
+	if #notes == 0 and not getConfig().raidNotesLocked then
+		notes = { { name = "Example raid note", preview = true, index = 0 } }
+	end
 	local parts = {}
 	for _, note in ipairs(notes) do parts[#parts + 1] = note.index .. ":" .. note.name end
 	local signature = table.concat(parts, "\031") .. ":" .. tostring(getConfig().raidNotesLocked)
@@ -119,7 +131,7 @@ function R.Refresh(force)
 	end
 	for slot, note in ipairs(notes) do
 		local button = getButton(slot)
-		button.noteIndex = note.index
+		button.noteIndex = not note.preview and note.index or nil
 		button:SetSize(width, height)
 		button:ClearAllPoints()
 		button:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -((slot - 1) * (height + gap)))

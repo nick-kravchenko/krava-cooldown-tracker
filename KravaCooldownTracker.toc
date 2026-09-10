@@ -4,12 +4,14 @@
 ## Author: Krava
 ## Version: 0.0.1
 ## SavedVariables: KravaCooldownTrackerDB
+## SavedVariablesPerCharacter: KravaCooldownTrackerCharacterDB
 ## OptionalDeps: LibSharedMedia-3.0, SharedMedia, WeakAuras, MRT
 
 KravaCooldownTracker_Trinkets.lua
 KravaCooldownTracker_Consumables.lua
 KravaCooldownTracker_Helpers.lua
 KravaCooldownTracker_Config.lua
+KravaCooldownTracker_ConfigTransfer.lua
 KravaCooldownTracker_TrinketLogic.lua
 KravaCooldownTracker_DebuffLogic.lua
 KravaCooldownTracker_ConsumableLogic.lua

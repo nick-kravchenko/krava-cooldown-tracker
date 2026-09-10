@@ -289,6 +289,7 @@ local function savePosition()
 end
 
 local function restorePosition()
+	frame:ClearAllPoints()
 	local pos = KravaCooldownTrackerDB.consumablePos
 	if pos and pos.point and pos.relPoint then
 		frame:SetPoint(pos.point, UIParent, pos.relPoint, pos.x or 0, pos.y or 0)
@@ -296,6 +297,14 @@ local function restorePosition()
 		frame:SetPoint("CENTER", UIParent, "CENTER", 0, -70)
 	end
 end
+
+function L.RestorePosition()
+	if not frame then return end
+	if InCombatLockdown and InCombatLockdown() then return end
+	frame:StopMovingOrSizing()
+	restorePosition()
+end
+
 
 local function setHandlesShown(shown)
 	for _, handle in ipairs({ leftHandle, rightHandle }) do
@@ -361,7 +370,9 @@ local function configureButton(button, reminder, size, index, cfg)
 		button:SetAttribute("macrotext1", nil)
 		button:SetAttribute("unit", nil)
 		button:SetAttribute("target-slot", nil)
-		if target == "mainhand" or target == "offhand" or target == "chest" then
+		if reminder.preview then
+			-- Preview icons have no item-use action.
+		elseif target == "mainhand" or target == "offhand" or target == "chest" then
 			local slot = target == "mainhand" and 16 or target == "offhand" and 17 or 5
 			local itemName = GetItemInfo(item.itemId)
 			button:SetAttribute("type1", "item")
@@ -384,7 +395,7 @@ function L.RefreshRuntime()
 	end
 	local cfg = Config.Get()
 	local enabled = Config.IsFeatureEnabled("consumables")
-	if not enabled or (cfg.consumableRaidOnly and not inRaidInstance()) then
+	if not enabled or (cfg.consumableLocked and cfg.consumableRaidOnly and not inRaidInstance()) then
 		frame:Hide()
 		setHandlesShown(false)
 		return
@@ -392,6 +403,9 @@ function L.RefreshRuntime()
 	local _, classToken = UnitClass("player")
 	local profile = Catalog.GetProfile(classToken, L.GetSpecIndex())
 	local reminders = L.Evaluate(profile, collectState(), Catalog.ITEMS)
+	if #reminders == 0 and not cfg.consumableLocked then
+		reminders = { { item = Catalog.ITEMS.flask_assault, preview = true }, { item = Catalog.ITEMS.food_spell, preview = true } }
+	end
 	local size = cfg.consumableIconSize or 32
 	for index, reminder in ipairs(reminders) do
 		local button = buttons[index]
